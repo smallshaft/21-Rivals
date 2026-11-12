@@ -73,22 +73,29 @@ def write_markdown(rep: dict, path=None):
     w(f"- 4-Card Total: exact EV {pct(he['fc_exact']['ev'], 3)}, sim {pct(he['fc_sim_ev'], 3)}\n")
 
     w("## Head-to-head results (exact shared-shoe simulation)\n")
-    for pname, label in (("optimizer", "Optimizer (this app)"), ("basic_min", "Baseline: basic strategy + 10 bets"),
+    names = rep.get("model_names", MODEL_NAMES)
+    for pname, label in (("optimizer", "v2 optimizer: prices in the shared cards (this app)"),
+                         ("optimizer_v1", "v1 optimizer: treated opponent's cards as independent (old)"),
+                         ("basic_min", "Baseline: basic strategy + 10 bets"),
                          ("basic_flat200", "Baseline: basic strategy + flat 200"),
                          ("opt_basic_play", "Attribution: optimizer bets, basic-strategy play"),
                          ("opt_no_sides", "Attribution: optimizer without side stakes")):
+        if pname not in rep["main"]:
+            continue
         res = rep["main"][pname]
         w(f"### {label}\n")
         w("| Opponent | Win | Tie | Loss | Win% of decided | 99% CI | EV per $1 entry | $1 | $5 | $10 | $20 |")
         w("|---|---|---|---|---|---|---|---|---|---|---|")
-        for k in MODEL_KEYS + ["_default_mix"]:
+        for k in MODEL_KEYS + ["near_mirror", "_default_mix"]:
+            if k not in res:
+                continue
             r = res[k]
-            name = "**Default mix**" if k == "_default_mix" else MODEL_NAMES[k]
+            name = "**Default mix**" if k == "_default_mix" else names[k]
             pm = r["profit_per_match"]
             w(f"| {name} | {pct(r['win'])} | {pct(r['tie'])} | {pct(r['loss'])} | {pct(r['dec_rate'])} | "
               f"{ci(r['dec_ci99'])} | {r['ev_per_dollar']:+.4f} | "
               + " | ".join(f"{pm[str(e)]:+.3f}" for e in ENTRIES) + " |")
-        w(f"\nDefault-mix verdict: **{verdict(res['_default_mix'])}**\n")
+        w(f"\nDefault-mix verdict (mix excludes near-mirror): **{verdict(res['_default_mix'])}**\n")
 
     nm = rep.get("near_mirror")
     if nm:
@@ -120,8 +127,9 @@ def write_markdown(rep: dict, path=None):
 
     w("## Sensitivity: strategy optimized for mix X, played against opponent Y (win% of decided)\n")
     sens = rep["sensitivity"]
-    cols = ["sharp_a", "casual_a", "casual_b", "sharp_c", "_default_mix"]
-    w("| Optimized for | " + " | ".join("Default mix" if c == "_default_mix" else MODEL_NAMES[c] for c in cols) + " |")
+    cols = [c for c in ["sharp_a", "casual_a", "casual_b", "sharp_c", "near_mirror", "_default_mix"]
+            if c in next(iter(sens.values()))]
+    w("| Optimized for | " + " | ".join("Default mix" if c == "_default_mix" else names[c] for c in cols) + " |")
     w("|---" * (len(cols) + 1) + "|")
     for name, row in sens.items():
         w(f"| {name} | " + " | ".join(pct(row[c]['dec_rate']) for c in cols) + " |")
@@ -130,11 +138,12 @@ def write_markdown(rep: dict, path=None):
     rob = rep.get("robustness")
     if rob:
         w("## Robustness: default plan vs opponents it was NOT tuned for\n")
-        w("| Opponent variant | Optimizer win% decided | 99% CI | Basic+min bets |")
-        w("|---|---|---|---|")
+        w("| Opponent variant | v2 win% decided | 99% CI | v1 (old) | Basic+min bets |")
+        w("|---|---|---|---|---|")
         for k, v in rob.items():
             o = v["optimizer"]
-            w(f"| {v['name']} | {pct(o['dec_rate'])} | {ci(o['dec_ci99'])} | {pct(v['basic_min']['dec_rate'])} |")
+            v1 = pct(v["optimizer_v1"]["dec_rate"]) if "optimizer_v1" in v else "-"
+            w(f"| {v['name']} | {pct(o['dec_rate'])} | {ci(o['dec_ci99'])} | {v1} | {pct(v['basic_min']['dec_rate'])} |")
         w("")
 
     w("## Rule assumptions (default mix, re-optimized)\n")

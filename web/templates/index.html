@@ -89,6 +89,7 @@ th { color: var(--text-2); font-weight: 600; }
     <div class="card">
       <label>Hand</label>
       <div class="seg" id="handSeg"></div>
+      <div id="histRow" style="margin-top:8px"></div>
       <div class="row" style="margin-top:10px">
         <div><label>My chips now</label><input id="chips" type="number" inputmode="decimal" value="1000"></div>
       </div>
@@ -100,7 +101,8 @@ th { color: var(--text-2); font-weight: 600; }
       <div class="betnum" id="betNum">-</div>
       <div id="betSides"></div>
       <div class="kv"><span>Est. win / tie / loss</span><b id="betProb">-</b></div>
-      <div class="small" style="margin-top:6px">Win estimate is the optimizer's internal model (it assumes the opponent's cards are independent of yours). The real simulated rate is on the Results tab.</div>
+      <div id="oppBox" style="margin-top:8px"></div>
+      <div class="small" style="margin-top:6px">Estimates come from millions of simulated matches with the same shared-card rule, conditioned on your results so far.</div>
       <details style="margin-top:8px"><summary class="small">I placed something different</summary>
         <div class="row" style="margin-top:8px">
           <div><label>Main bet</label><input id="placedBet" type="number" inputmode="decimal"></div>
@@ -179,7 +181,7 @@ th { color: var(--text-2); font-weight: 600; }
   <section id="tab-settings" class="hidden">
     <h1>Settings</h1>
     <div class="card">
-      <div class="small">Opponent population mix (weights, auto-normalized). Changing this re-optimizes the strategy (30-90 s).</div>
+      <div class="small">Opponent population mix (weights, auto-normalized). Changing this re-optimizes the strategy (1-5 min).</div>
       <div id="mixBox"></div>
     </div>
     <div class="card">
@@ -251,24 +253,44 @@ function resetHandState() {
        active: 0, doubled: false, stage: 'cards', hist: []};
 }
 let HAND = 1;
+let RESULTS = [];          // your result (units of your bet) on each finished hand this match
+let CHIPS_BEFORE = 1000, BET_PLACED = 0;
+const RES_OPTS = [[-2, 'Lost a double/split'], [-1, 'Lost'], [0, 'Push'], [1, 'Won'], [1.5, 'Blackjack'], [2, 'Won a double/split']];
+function resClass(x) { return x <= -2 ? -2 : x < 0 ? -1 : x === 0 ? 0 : x === 1.5 ? 1.5 : x <= 1 ? 1 : 2; }
 function drawHandSeg() {
   $('handSeg').innerHTML = [1,2,3,4,5].map(h => `<button class="${h===HAND?'on':''}" onclick="HAND=${h};drawHandSeg()">${h}</button>`).join('');
+  while (RESULTS.length < HAND - 1) RESULTS.push(0);
+  RESULTS = RESULTS.slice(0, HAND - 1);
+  $('histRow').innerHTML = RESULTS.length ? '<label>Your results so far (auto-filled; fix if wrong)</label>' +
+    RESULTS.map((x, i) => `<div class="row" style="margin-top:4px"><div style="flex:0 0 70px" class="small">Hand ${i + 1}</div><div><select style="font-size:16px;padding:6px" onchange="RESULTS[${i}]=+this.value">` +
+      RES_OPTS.map(([v, n]) => `<option value="${v}" ${resClass(x) === v ? 'selected' : ''}>${n}</option>`).join('') + '</select></div></div>').join('') : '';
 }
 function placed() {
   return {bet: +$('placedBet').value, pp: +$('placedPP').value || 0, fc: +$('placedFC').value || 0};
 }
 async function getBet() {
   const chips = +$('chips').value;
-  const r = await api('/api/prehand', {hand: HAND, chips});
+  const r = await api('/api/prehand', {hand: HAND, chips, results: RESULTS.slice(0, HAND - 1)});
+  CHIPS_BEFORE = chips;
   $('betCard').classList.remove('hidden');
   $('doneCard').classList.add('hidden');
   $('betNum').textContent = r.bet ? r.bet.toLocaleString() + (r.allin ? '  (ALL IN)' : '') : '-';
   let sides = '';
-  sides += `<div class="kv"><span>Perfect Pairs</span><b>${r.pp ? r.pp : 'none'}</b></div>`;
-  sides += `<div class="kv"><span>4-Card Total</span><b>${r.fc ? r.fc : 'none'}</b></div>`;
+  if (r.pp) sides += `<div class="kv"><span>Perfect Pairs</span><b>${r.pp}</b></div>`;
+  if (r.fc) sides += `<div class="kv"><span>4-Card Total</span><b>${r.fc}</b></div>`;
+  if (!r.pp && !r.fc) sides = `<div class="small">No side stakes. No insurance.</div>`;
   $('betSides').innerHTML = sides;
   $('betProb').textContent = r.win != null ? `${pct(r.win)} / ${pct(r.tie)} / ${pct(r.loss)}` : '-';
   $('placedBet').value = r.bet; $('placedPP').value = r.pp; $('placedFC').value = r.fc;
+  const o = r.opponent;
+  if (o) {
+    let h = `<div class="small">OPPONENT ESTIMATE</div>`;
+    h += `<div class="kv"><span>Their chips now (likely)</span><b>~${Math.round(o.median).toLocaleString()}</b></div>`;
+    h += `<div class="kv"><span>Middle half</span><b>${Math.round(o.q25).toLocaleString()} to ${Math.round(o.q75).toLocaleString()}</b></div>`;
+    if (HAND > 1) h += `<div class="kv"><span>Last hand they</span><b>gained ${pct(o.last_up, 0)} / even ${pct(o.last_same, 0)} / lost ${pct(o.last_down, 0)}</b></div>`;
+    $('oppBox').innerHTML = h;
+  } else $('oppBox').innerHTML = '';
+  if (r.note) banner(r.note); else banner(null);
   resetHandState();
   $('playCard').classList.remove('hidden');
   render();
@@ -332,7 +354,7 @@ async function render() {
       const r = await api('/api/insurance', baseState());
       if (r.offered) {
         setPrompt(''); pad(false);
-        $('actionBox').innerHTML = `<div class="action a-${r.take ? 'DOUBLE' : 'STAND'}" style="font-size:34px">${r.take ? 'TAKE INSURANCE' : 'NO INSURANCE'}</div>`;
+        $('actionBox').innerHTML = `<div class="action a-${r.take ? 'DOUBLE' : 'STAND'}" style="font-size:34px">${r.take ? 'TAKE INSURANCE' : 'NO INSURANCE'}</div>` + (r.why ? `<div class="small" style="text-align:center">${r.why}</div>` : '');
         $('choiceBox').innerHTML = chooseHtml('What did you do?',
           [['Took it', 'snapshot();S.ins=true;S.stage="act";render()'], ['Declined', 'snapshot();S.ins=false;S.stage="act";render()']]) +
           `<button class="sec" onclick="handOver('Dealer had blackjack')">Dealer had blackjack (hand over)</button>`;
@@ -418,10 +440,12 @@ function nextHand() {
   const v = $('chipsAfter').value;
   if (v === '') { $('chipsAfter').focus(); return; }
   if (HAND >= 5) {
-    $('logMe').value = v; HAND = 1; drawHandSeg(); $('chips').value = 1000;
+    $('logMe').value = v; HAND = 1; RESULTS = []; drawHandSeg(); $('chips').value = 1000;
     $('doneCard').classList.add('hidden'); $('betCard').classList.add('hidden');
     tab('log'); return;
   }
+  const bet = +$('placedBet').value || 0;
+  RESULTS[HAND - 1] = bet ? Math.max(-4, Math.min(4, Math.round((+v - CHIPS_BEFORE) / bet * 2) / 2)) : 0;
   HAND += 1; drawHandSeg(); $('chips').value = v;
   getBet();
 }

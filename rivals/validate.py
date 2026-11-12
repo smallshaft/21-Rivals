@@ -22,6 +22,7 @@ from .config import (Settings, Rules, MODEL_KEYS, MODEL_NAMES, ENTRIES, BREAKEVE
                      RESULTS_DIR, Profile, DEFAULT_MIX)
 from . import optimizer as O
 from .strategy import build_tables, perfect_pairs_exact, four_card_total_exact
+from . import corr
 
 Z99 = 2.5758293035489
 JITTER_P = core.ZP.copy()
@@ -86,52 +87,72 @@ def mixture(results: dict, weights: dict):
 # running matchups
 # ----------------------------------------------------------------------------
 class Ctx:
-    """Everything needed to run sims for one rule set."""
+    """Everything needed to run sims for one rule set.
 
-    def __init__(self, settings: Settings, n_opp=1_000_000, verbose=True):
+    A *strategy* is (ptype, P, tables).  'v2' is the correlation-aware plan
+    (corr.py, used by the app); 'v1' is the original plan that treated the
+    opponent's cards as independent (optimizer.py), kept for comparison."""
+
+    def __init__(self, settings: Settings, n_opp=1_000_000, n_scen=3_000_000, verbose=True):
         self.s = settings
         self.T = build_tables(settings.rules)
         self.J = O.joint_tables(self.T)
         self.pmfs = O.model_pmfs_for(settings, self.T, self.J, n_opp)
         self.sc = O.sharp_c_plan(settings, self.T, self.J, self.pmfs[MODEL_KEYS.index("sharp_a")])
+        self.n_scen = n_scen
         self.verbose = verbose
 
-    def plan_for(self, mix):
+    def _settings(self, mix):
         s2 = Settings.from_dict(json.loads(self.s.to_json()))
         s2.mix = {k: float(mix.get(k, 0.0)) for k in MODEL_KEYS}
-        return O.build_plan(s2, T=self.T, J=self.J, model_pmfs=self.pmfs, verbose=False)
+        return s2
 
-    def opponent(self, key, plan):
-        tabs = (plan.bet, plan.pp, plan.fc, plan.Vall)
+    def plan_for(self, mix):
+        return O.build_plan(self._settings(mix), T=self.T, J=self.J, model_pmfs=self.pmfs, verbose=False)
+
+    def tree_for(self, mix):
+        return corr.build_tree_plan(self._settings(mix), n_per_type=self.n_scen, T=self.T, verbose=False)
+
+    @staticmethod
+    def v1(plan, P=None):
+        return (core.T_OPT, core.ZP if P is None else P, (plan.bet, plan.pp, plan.fc, plan.Vall))
+
+    @staticmethod
+    def v2(tp, jitter=0.0):
+        return (core.T_OPT, corr.tree_player_params(jitter), tp.engine_tables())
+
+    @staticmethod
+    def param(P):
+        return (core.T_PARAM, P, O.dummy_plan_arrays())
+
+    def opponent(self, key, app):
+        """app: the strategy that Sharp B mirrors / near-mirror jitters."""
         if key == "sharp_b":
-            return core.T_OPT, core.ZP, tabs
-        if key == "sharp_c":
-            return core.T_OPT, JITTER_P, self.sc
+            return app
         if key == "near_mirror":
-            return core.T_OPT, JITTER_P, tabs
-        return core.T_PARAM, self.s.profile(key).as_params(), O.dummy_plan_arrays()
+            t, P, tabs = app
+            P2 = P.copy(); P2[12] = 0.30
+            return (t, P2, tabs)
+        if key == "sharp_c":
+            return (core.T_OPT, JITTER_P, self.sc)
+        return self.param(self.s.profile(key).as_params())
 
-    def run(self, me, opp_key, plan, n, seed):
-        """me = (ptype, P). Returns (summary, hist_me, hist_opp)."""
-        tA, PA = me
-        tB, PB, tabB = self.opponent(opp_key, plan)
+    def run(self, me, opp_key, app, n, seed):
+        """me, app = strategies. Returns (summary, hist_me, hist_opp)."""
+        tA, PA, tabA = me
+        tB, PB, tabB = self.opponent(opp_key, app)
         T = self.T
         wtl, hA, hB = core.simulate(n, seed, O.NCHUNK, tA, PA, tB, PB, T.R, T.D, T.act2, T.actN,
-                                    T.splt, T.subd, plan.bet, plan.pp, plan.fc, plan.Vall, O.NV,
-                                    *tabB)
+                                    T.splt, T.subd, *tabA, O.NV, *tabB)
         w, t, l = wtl.sum(axis=0)
         return summarize(int(w), int(t), int(l)), hA, hB
 
 
 def me_players():
-    p_basicplay = core.ZP.copy(); p_basicplay[18] = 1.0
-    p_nosides = core.ZP.copy(); p_nosides[17] = 1.0
+    """Parameter vectors for the non-plan players."""
     return {
-        "optimizer": (core.T_OPT, core.ZP),
-        "basic_min": (core.T_PARAM, Profile("min", bets=[10]).as_params()),
-        "basic_flat200": (core.T_PARAM, Profile("f200", bets=[200]).as_params()),
-        "opt_basic_play": (core.T_OPT, p_basicplay),
-        "opt_no_sides": (core.T_OPT, p_nosides),
+        "basic_min": Profile("min", bets=[10]).as_params(),
+        "basic_flat200": Profile("f200", bets=[200]).as_params(),
     }
 
 
@@ -201,62 +222,62 @@ def house_edge_check(ctx: Ctx, n=10_000_000):
             "pp_exact": perfect_pairs_exact(), "fc_exact": four_card_total_exact(), "n": n}
 
 
-def run_all(n_main=10_000_000, n_sweep=2_000_000, n_attr=2_000_000, quick=False):
+OPP_KEYS = MODEL_KEYS + ["near_mirror"]
+
+
+def run_all(n_main=10_000_000, n_sweep=2_000_000, quick=False):
     t0 = time.time()
     os.makedirs(RESULTS_DIR, exist_ok=True)
     settings = Settings()
     log = lambda *a: print(f"[{time.time() - t0:7.1f}s]", *a, flush=True)
-    log("building tables, opponent distributions, default plan ...")
-    ctx = Ctx(settings)
+    log("building tables, opponent distributions, plans ...")
+    ctx = Ctx(settings, n_scen=500_000 if quick else 3_000_000)
     plan = ctx.plan_for(settings.mix)
+    tp = ctx.tree_for(settings.mix)
+    v2, v1 = ctx.v2(tp), ctx.v1(plan)
     rep = {"settings": json.loads(settings.to_json()), "n_main": n_main, "n_sweep": n_sweep,
-           "breakeven": BREAKEVEN, "model_names": MODEL_NAMES}
+           "breakeven": BREAKEVEN, "model_names": {**MODEL_NAMES, "near_mirror": "Near-mirror (this plan, bets +/-30%)"}}
     rep["house_edge"] = house_edge_check(ctx, 2_000_000 if quick else 20_000_000)
     log("house edge", rep["house_edge"]["basic_ev_per_hand"])
-    rep["model_estimate_default"] = {"win": float(plan.Wall[0][400]), "loss": float(plan.Lall[0][400])}
 
     # ---------- main matchups ----------
-    players = me_players()
-    main = {}
-    hists = {}
-    seed = SEED
-    for pname, me in players.items():
+    players = {"optimizer": (v2, v2), "optimizer_v1": (v1, v1),
+               "basic_min": (ctx.param(me_players()["basic_min"]), v2),
+               "basic_flat200": (ctx.param(me_players()["basic_flat200"]), v2)}
+    main, hists, seed = {}, {}, SEED
+    for pname, (me, app) in players.items():
         main[pname] = {}
-        n = n_main if pname in ("optimizer", "basic_min", "basic_flat200") else n_attr
-        for k in MODEL_KEYS:
+        for k in OPP_KEYS:
+            if k == "near_mirror" and pname.startswith("basic"):
+                continue
             seed += 1
-            res, hA, hB = ctx.run(me, k, plan, n, seed)
+            res, hA, hB = ctx.run(me, k, app, n_main, seed)
             main[pname][k] = res
             if pname == "optimizer":
                 hists[f"me_vs_{k}"] = hA
                 hists[f"opp_{k}"] = hB
-            log(f"{pname:15s} vs {k:9s} W {res['win']:.4f} T {res['tie']:.4f} L {res['loss']:.4f} "
+            log(f"{pname:14s} vs {k:11s} W {res['win']:.4f} T {res['tie']:.4f} L {res['loss']:.4f} "
                 f"dec {res['dec_rate']:.4f} [{res['dec_ci99'][0]:.4f},{res['dec_ci99'][1]:.4f}]")
         main[pname]["_default_mix"] = mixture(main[pname], settings.mix)
     rep["main"] = main
-    # near-mirror: someone running this same plan but sizing bets +/-30% differently
-    seed += 1
-    rep["near_mirror"], _, _ = ctx.run(players["optimizer"], "near_mirror", plan, n_attr, seed)
-    log("near mirror", rep["near_mirror"]["dec_rate"])
+    rep["near_mirror"] = main["optimizer"]["near_mirror"]
     np.savez_compressed(os.path.join(RESULTS_DIR, "sim_hist.npz"), **hists)
 
     # ---------- sweeps (re-optimized for each mix) ----------
     xs = [i / 10 for i in range(11)]
     rep["sweeps"] = {}
-    plans_by = {}
     for kind in ("ab", "c", "nm"):
         rows = []
         for x in xs:
             mix = sweep_mix(x, kind)
-            p = ctx.plan_for(mix)
-            plans_by[(kind, x)] = p
+            app = ctx.v2(ctx.tree_for(mix))
             per = {}
             for k in MODEL_KEYS:
                 if mix.get(k, 0) <= 0:
                     continue
                 seed += 1
                 ek = "near_mirror" if (kind == "nm" and k == "sharp_b") else k
-                per[k], _, _ = ctx.run(players["optimizer"], ek, p, n_sweep, seed)
+                per[k], _, _ = ctx.run(app, ek, app, n_sweep, seed)
             m = mixture(per, mix)
             fixed = mixture(main["optimizer"], mix) if kind == "ab" else None
             base = mixture(main["basic_min"], mix) if kind == "ab" else None
@@ -275,17 +296,18 @@ def run_all(n_main=10_000_000, n_sweep=2_000_000, n_attr=2_000_000, quick=False)
     sens = {}
     cands = {"default": settings.mix,
              "all_casual": sweep_mix(0.0, "ab"), "50%_sharp": sweep_mix(0.5, "ab"),
-             "100%_sharp_ab": sweep_mix(1.0, "ab"),
              "only_sharp_a": {"sharp_a": 1.0}, "only_casual_a": {"casual_a": 1.0},
-             "only_casual_b": {"casual_b": 1.0}}
+             "only_casual_b": {"casual_b": 1.0}, "with_25%_sharp_c": {**settings.mix, "sharp_c": 0.25}}
+    if quick:
+        cands = {"default": settings.mix, "only_casual_b": {"casual_b": 1.0}}
     for name, mix in cands.items():
-        p = plan if name == "default" else ctx.plan_for(mix)
+        app = v2 if name == "default" else ctx.v2(ctx.tree_for(mix))
         sens[name] = {}
-        for k in ("sharp_a", "casual_a", "casual_b", "sharp_c"):
+        for k in ("sharp_a", "casual_a", "casual_b", "sharp_c", "near_mirror"):
             seed += 1
-            sens[name][k], _, _ = ctx.run(players["optimizer"], k, p, n_sweep, seed)
+            sens[name][k], _, _ = ctx.run(app, k, app, n_sweep, seed)
         sens[name]["_default_mix"] = mixture(sens[name], {**settings.mix, "sharp_b": 0.0})
-        log(f"sensitivity {name:14s} " + " ".join(f"{k}:{v['dec_rate']:.3f}" for k, v in sens[name].items()))
+        log(f"sensitivity {name:16s} " + " ".join(f"{k}:{v['dec_rate']:.3f}" for k, v in sens[name].items()))
     rep["sensitivity"] = sens
 
     # ---------- rule assumptions ----------
@@ -298,12 +320,12 @@ def run_all(n_main=10_000_000, n_sweep=2_000_000, n_attr=2_000_000, quick=False)
     for vname, flags in variants.items():
         s2 = Settings()
         s2.rules = Rules(**{**Rules().__dict__, **flags})
-        c2 = Ctx(s2)
-        p2 = c2.plan_for(s2.mix)
+        c2 = Ctx(s2, n_scen=ctx.n_scen)
+        app = c2.v2(c2.tree_for(s2.mix))
         per = {}
         for k in MODEL_KEYS:
             seed += 1
-            per[k], _, _ = c2.run(players["optimizer"], k, p2, n_sweep, seed)
+            per[k], _, _ = c2.run(app, k, app, n_sweep, seed)
         he = house_edge_check(c2, 2_000_000 if quick else 10_000_000)
         rep["assumptions"][vname] = {"per_model": per, "default_mix": mixture(per, s2.mix),
                                      "basic_ev_per_hand": he["basic_ev_per_hand"]}
@@ -312,9 +334,8 @@ def run_all(n_main=10_000_000, n_sweep=2_000_000, n_attr=2_000_000, quick=False)
     # ---------- bankroll ----------
     dm = main["optimizer"]["_default_mix"]
     rep["ruin_default_mix"] = risk_of_ruin(dm["win"], dm["tie"], dm["loss"])
-    # stress: half the pool are near-mirror players (match-aware, like this app)
     nm_rows = rep["sweeps"].get("nm", {}).get("rows", [])
-    stress = nm_rows[5]["reopt"] if len(nm_rows) > 5 else mixture(main["optimizer"], settings.mix)
+    stress = nm_rows[5]["reopt"] if len(nm_rows) > 5 else dm
     rep["stress_mix"] = stress
     rep["ruin_stress_mix"] = risk_of_ruin(stress["win"], stress["tie"], stress["loss"])
     rep["elapsed_s"] = time.time() - t0
@@ -333,6 +354,6 @@ if __name__ == "__main__":
     ap.add_argument("--sweep-n", type=int, default=2_000_000)
     a = ap.parse_args()
     if a.quick:
-        run_all(n_main=300_000, n_sweep=200_000, n_attr=200_000, quick=True)
+        run_all(n_main=300_000, n_sweep=200_000, quick=True)
     else:
         run_all(n_main=a.n, n_sweep=a.sweep_n)

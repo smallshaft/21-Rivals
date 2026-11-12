@@ -36,23 +36,24 @@ VARIANTS = {
 def run(n=2_000_000, seed=777):
     s = Settings()
     ctx = Ctx(s)
-    plan = ctx.plan_for(s.mix)
+    v2 = ctx.v2(ctx.tree_for(s.mix))
+    v1 = ctx.v1(ctx.plan_for(s.mix))
+    base = ctx.param(me_players()["basic_min"])
     T = ctx.T
-    me = me_players()["optimizer"]
-    base = me_players()["basic_min"]
     out = {}
     for k, prof in VARIANTS.items():
         res = {}
-        for name, pl in (("optimizer", me), ("basic_min", base)):
+        for name, (tA, PA, tabA) in (("optimizer", v2), ("optimizer_v1", v1), ("basic_min", base)):
             seed += 1
-            wtl, _, _ = core.simulate(n, seed, O.NCHUNK, pl[0], pl[1], core.T_PARAM, prof.as_params(),
-                                      T.R, T.D, T.act2, T.actN, T.splt, T.subd, plan.bet, plan.pp, plan.fc,
-                                      plan.Vall, O.NV, *O.dummy_plan_arrays())
+            wtl, _, _ = core.simulate(n, seed, O.NCHUNK, tA, PA, core.T_PARAM, prof.as_params(),
+                                      T.R, T.D, T.act2, T.actN, T.splt, T.subd, *tabA, O.NV,
+                                      *O.dummy_plan_arrays())
             w, t, l = wtl.sum(axis=0)
             res[name] = summarize(int(w), int(t), int(l))
         res["name"] = prof.name
         out[k] = res
-        print(f"{prof.name:50s} opt {res['optimizer']['dec_rate']:.4f}  basic_min {res['basic_min']['dec_rate']:.4f}")
+        print(f"{prof.name:50s} v2 {res['optimizer']['dec_rate']:.4f}  v1 {res['optimizer_v1']['dec_rate']:.4f}"
+              f"  basic_min {res['basic_min']['dec_rate']:.4f}")
     path = os.path.join(RESULTS_DIR, "report.json")
     with open(path) as f:
         rep = json.load(f)

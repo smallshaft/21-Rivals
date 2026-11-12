@@ -369,7 +369,7 @@ def play_hand(shoe, ptr, c, hidx, ptype, P, pst, R, D, act2, actN, splt, subd,
     player_bj = (cval(p1) + cval(p2) == 11) and (cval(p1) == 1 or cval(p2) == 1)
     peek = R[R_PEEK] == 1
 
-    Vn = Vall[hidx + 1]
+    Vn = Vall[min(hidx + 1, Vall.shape[0] - 1)]
     offs = np.zeros(4)
     offp = np.zeros(4)
     inspay = np.zeros(7)
@@ -648,17 +648,91 @@ def init_pstate(P, pst):
 @njit(cache=True)
 def play_match_player(shoe, ptype, P, R, D, act2, actN, splt, subd,
                       bet_tab, pp_tab, fc_tab, Vall, pst, rec, trace):
+    """Tree mode (ptype T_OPT with P[19] == 1): bet_tab rows are result-history
+    nodes (see corr.py) instead of hand numbers; the node advances by the class
+    of each hand's result."""
     c = 1000.0
     ptr = 0
     if ptype == T_OPT:
         pst[0] = 1.0
         if P[12] > 0.0:
             pst[0] = 1.0 + P[12] * (2.0 * np.random.random() - 1.0)
+    tree = ptype == T_OPT and P[19] == 1.0
+    code = 0
     for h in range(5):
-        c, ptr = play_hand(shoe, ptr, c, h, ptype, P, pst, R, D, act2, actN, splt, subd,
+        row = NODE_OFF[h] + code if tree else h
+        c, ptr = play_hand(shoe, ptr, c, row, ptype, P, pst, R, D, act2, actN, splt, subd,
                            bet_tab, pp_tab, fc_tab, Vall, rec)
         trace[h] = c
+        if tree:
+            code = code * NCLS + xclass(rec[0])
     return c
+
+
+# ---------------------------------------------------------------------------
+# Result-history tree (correlation-aware plan, corr.py)
+# ---------------------------------------------------------------------------
+NCLS = 6
+NODE_OFF = np.array([0, 1, 7, 43, 259, 1555, 9331])   # first node id at each depth
+
+
+@njit(cache=True)
+def xclass(x):
+    """Class of a hand result (net units of the main bet):
+    0 lost 2+ (double/split), 1 lost, 2 push, 3 won 1, 4 blackjack, 5 won 2+."""
+    if x <= -2.0:
+        return 0
+    if x < 0.0:
+        return 1
+    if x == 0.0:
+        return 2
+    if x == 1.5:
+        return 4
+    if x <= 1.0:
+        return 3
+    return 5
+
+
+@njit(parallel=True, cache=True)
+def gen_scenarios(n, seed, nchunks, tB, PB, R, D, act2, actN, splt, subd,
+                  bet_b, pp_b, fc_b, Vall_b):
+    """n matches on fresh shoes: 'me' plays basic strategy with a flat 10 bet
+    (doubles always affordable) and records each hand's result in units; the
+    opponent plays its own strategy on the SAME shoe.  Returns
+    X[n,5] (my unit results), O[n] (opp final chips), OT[n,5] (opp chips after each hand)."""
+    X = np.zeros((n, 5), dtype=np.float32)
+    O = np.zeros(n, dtype=np.float32)
+    OT = np.zeros((n, 5), dtype=np.float32)
+    per = (n + nchunks - 1) // nchunks
+    PA = np.zeros(20)
+    PA[0] = 10.0
+    PA[6] = 1.0
+    dummy = np.zeros((5, 1))
+    for ch in prange(nchunks):
+        np.random.seed(seed * 1000003 + ch)
+        shoe = np.empty(52 * NDECK, dtype=np.int64)
+        pa = np.zeros(6)
+        pb = np.zeros(6)
+        rec = np.zeros(4)
+        tr = np.zeros(5)
+        tro = np.zeros(5)
+        lo = ch * per
+        hi = min(n, lo + per)
+        for i in range(lo, hi):
+            make_shoe(shoe)
+            init_pstate(PA, pa)
+            init_pstate(PB, pb)
+            play_match_player(shoe, T_PARAM, PA, R, D, act2, actN, splt, subd,
+                              dummy, dummy, dummy, Vall_b, pa, rec, tr)
+            prev = 1000.0
+            for h in range(5):
+                X[i, h] = (tr[h] - prev) / 10.0
+                prev = tr[h]
+            O[i] = play_match_player(shoe, tB, PB, R, D, act2, actN, splt, subd,
+                                     bet_b, pp_b, fc_b, Vall_b, pb, rec, tro)
+            for h in range(5):
+                OT[i, h] = tro[h]
+    return X, O, OT
 
 
 @njit(parallel=True, cache=True)

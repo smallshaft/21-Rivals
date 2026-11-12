@@ -263,3 +263,39 @@ def test_optimizer_mirror_ties():
             c = ci * 2.5
             b, s1, s2 = plan.bet[h, ci], plan.pp[h, ci], plan.fc[h, ci]
             assert b % 5 == 0 and b >= 10 and b + s1 + s2 <= c + 1e-9
+
+
+# ---------------------------------------------------------------------------
+# v2 (correlation-aware) plan
+# ---------------------------------------------------------------------------
+def test_result_classes():
+    assert [core.xclass(x) for x in (-4, -2, -1, 0, 1, 1.5, 2, 3)] == [0, 0, 1, 2, 3, 4, 5, 5]
+
+
+def test_tree_plan_mirror_ties_and_history_tracking():
+    from rivals import corr
+    from rivals.config import Settings
+    tp = corr.build_tree_plan(Settings(), n_per_type=100_000, verbose=False, T=T)
+    tabs = tp.engine_tables()
+    P = corr.tree_player_params()
+    wtl, _, _ = core.simulate(20000, 5, 8, core.T_OPT, P, core.T_OPT, P, T.R, T.D, T.act2,
+                              T.actN, T.splt, T.subd, *tabs, 10, *tabs)
+    assert wtl.sum(axis=0)[1] == 20000
+    # replay matches by hand: the engine's bet each hand must equal the table entry for
+    # the node built from this match's earlier results (what the advisor does)
+    rec = np.zeros(4); tr = np.zeros(5); pst = np.zeros(6)
+    nb_seed(3)
+    shoe = np.empty(312, dtype=np.int64)
+    for _ in range(300):
+        core.make_shoe(shoe)
+        core.play_match_player(shoe, core.T_OPT, P, T.R, T.D, T.act2, T.actN, T.splt, T.subd,
+                               *tabs, pst, rec, tr)
+        c, hist = 1000.0, []
+        for h in range(5):
+            nd = corr.node_id(h, corr.history_code(hist))
+            b = float(tp.bet[nd, int(round(c / 2.5))])
+            if c >= 10:
+                x = (tr[h] - c) / b
+                assert abs(x * 2 - round(x * 2)) < 1e-9     # result is a whole number of half-bets
+                hist.append(x)
+            c = tr[h]

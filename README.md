@@ -4,7 +4,7 @@ A local web app (runs on your Mac, opens on an iPhone on the same Wi-Fi) plus a 
 
 It does three things:
 
-1. **Advises** every decision during a match: bet size, side stakes, insurance, hit/stand/double/split.
+1. **Advises** every decision during a match: bet size (based on what your results so far say about your opponent's chips), insurance, hit/stand/double/split.
 2. **Proves** (or disproves) the strategy by simulating millions of full matches with the exact shared-shoe rule. See [`results/REPORT.md`](results/REPORT.md).
 3. **Logs** real matches in SQLite and compares real results against the simulation.
 
@@ -13,6 +13,8 @@ The results summary is at the bottom of this file. **Read the "What this depends
 ---
 
 ## 1. Mac setup (one time, about 10 minutes)
+
+**Easiest:** download the ZIP, then double-click **Setup (run once).command** and later **Start 21 Rivals.command**. If macOS blocks a file the first time, open System Settings → Privacy & Security, scroll down, and click **Open Anyway**. The manual steps below do the same thing.
 
 You need Python 3.10 or newer. The `python3` that ships with macOS is usually too old.
 
@@ -57,7 +59,7 @@ cd ~/21-Rivals && source .venv/bin/activate && caffeinate -i python -m web.app
 
 (`caffeinate -i` keeps the Mac from sleeping while the app runs. Stop it with Ctrl+C.)
 
-The **first** launch builds the strategy (1–2 minutes; later launches take a few seconds). The terminal prints something like:
+The **first** launch builds the strategy by simulating ~9 million matches (about 2–5 minutes, needs ~3 GB of free memory; later launches take seconds). The terminal prints something like:
 
 ```
   On this Mac:            http://localhost:8021
@@ -82,22 +84,22 @@ The Mac's IP can change when the router restarts. If the bookmark stops working,
 ## 3. Using it during a match (6-minute clock)
 
 **Advisor tab**
-1. Pick the hand number (1–5), type current chips, tap **Get bet**. It shows the main bet plus any side stakes (Perfect Pairs / 4-Card Total). It's usually "none".
+1. Hand 1: chips are 1000; tap **Get bet**.
 2. Tap your two cards, then the dealer's upcard. `10` covers 10/J/Q/K.
-3. If you're dealt a pair with a Perfect Pairs stake out, it asks which kind of pair (mixed / same color / perfect).
-4. Dealer ace: it says TAKE or NO INSURANCE. Tap what you actually did.
-5. It shows the action in big letters. After a HIT or DOUBLE, tap the card you got; it re-prompts. SPLIT walks you through hand 1, then hand 2.
-6. When the hand is over, type chips after the hand and tap **Next hand**. After hand 5 it jumps to the Log tab.
+3. It shows the action in big letters (basic strategy). After a HIT or DOUBLE, tap the card you got; it re-prompts. SPLIT walks you through hand 1, then hand 2. Insurance: always no.
+4. When the hand is over, type your chips after the hand and tap **Next hand**. The app works out how that hand went (lost / push / won / blackjack / won or lost a double) from your chips and bet.
+5. For the next hand it shows the bet plus an **opponent estimate**: their likely chips right now and how likely they gained or lost on the last hand. Example: after your blackjack, there's a ~97% chance they gained too, because they got the same cards.
+6. After hand 5 it jumps to the Log tab.
 
-Responses are instant (under 10 ms on the server). The orange "Not basic strategy" tag marks spots where the match situation changes the play. "Toss-up" means the options are within 0.2% of each other, so either is fine.
+If you start the app mid-match, the hand selector shows "Your results so far": set how each earlier hand went so the bet is right. Responses take under 10 ms.
 
 **Log tab:** after every match, record W/L/T, entry, your final chips and the opponent's final chips (shown at the end of each match). **Log every match, including losses and matches where you didn't follow the advice.** Otherwise the dashboard lies to you.
 
 **Results tab:** real win rate with a 99% confidence range vs the simulation's prediction, P&L chart, ROI by entry size, and an estimate of what kind of opponents you're actually facing (from their final scores).
 
-**Settings tab:** opponent mix weights, rule flags, default entry size. Saving re-optimizes the strategy in the background (~1 minute).
+**Settings tab:** opponent mix weights, rule flags, default entry size. Saving re-optimizes the strategy in the background (~1–5 minutes).
 
-**Cheat sheet:** `results/cheatsheet.pdf` (also linked on the Results tab). One page: the bet plan, basic strategy chart, main deviations, insurance rule. Regenerate it after changing settings:
+**Cheat sheet:** `results/cheatsheet.pdf` (also linked on the Results tab). One page: bet tables by hand, last result and chips, plus the basic strategy chart. Paper can't hold the full plan (the bet depends on your whole result history), so the sheet is a simplified version. Its own simulated win rate is printed on it (a few points below the app). Regenerate it after changing settings:
 
 ```bash
 python -m rivals.cheatsheet
@@ -123,16 +125,20 @@ That plays the strategy against opponents it wasn't tuned for. Add `--quick` to 
 
 - **Engine** (`rivals/core.py`, compiled with numba): exact rules. One fixed 6-deck shoe order per match. Each player reads the same card sequence from their own position, so identical decisions mean identical cards; after a divergence, each player's cards differ. Unit tests (`tests/test_engine.py`) prove this on hand-built shoes.
 - **Basic strategy** isn't typed in; it's derived by the engine's own expectimax with chip-EV as the objective, then checked against the published chart.
-- **Optimizer** (`rivals/optimizer.py`):
-  - The objective is **expected profit per match**: +0.8 entry for a win, −1 for a loss, 0 for a tie. This is "maximize P(win)" with ties correctly counted as refunds, not expected chips. You can switch to pure P(win) in Settings.
-  - It simulates each opponent type to get the distribution of their final chips, mixes them by the population weights, then runs a backward DP over (hand #, my chips) to pick bet + side stakes.
-  - Every in-hand decision is an expectimax against that value function, so play can deviate from basic strategy when the match situation calls for it.
+- **Optimizer v2** (`rivals/corr.py`, used by the app). It prices in that you and your opponent get the same cards:
+  - It plays ~9 million matches on the real engine. In each, you play basic strategy and it records your result each hand; the opponent plays from the same shoe and it records their chips after every hand.
+  - Your result each hand goes in one of 6 classes: lost a double/split, lost, push, won, blackjack, won a double/split. Your sequence of classes so far is a "history". For every history it knows the actual distribution of the opponent's chips: how often they also won, by how much (their bet size), whether they drifted out of sync, and so on.
+  - A backward dynamic program over (history, your chips) picks each bet to maximize **expected profit per match** (+0.8 entry for a win, −1 for a loss, 0 for a tie; pure P(win) is a setting). Rare histories borrow statistics from their parent.
+  - In-hand play is basic strategy. Changing decisions would break the same-cards link the plan relies on, and v1's in-hand deviations were measured worth ~0. There are no side stakes or insurance in v2.
+  - The plan's main move: bet the minimum on hand 1. Lose → the opponent probably lost more, so keep betting small. Win → they probably won more, so bet up to catch them.
+- **Optimizer v1** (`rivals/optimizer.py`, kept for comparison): treated the opponent's final score as independent of your cards. That was wrong, and v2 replaces it.
 - **Validation** (`rivals/validate.py`): brute-force head-to-head matches with the real shared shoe. This, not the optimizer's internal estimate, is the source of every number in the report.
 
 ## 6. What this depends on (read this)
 
 - **Opponent models are guesses.** The edge comes almost entirely from opponents who *don't* shape their bets to win the match. Against someone doing roughly what this app does (the "near-mirror" test), you lose money after rake. The real pool is unknown until you log matches.
-- **The optimizer assumes your opponent's cards are independent of yours.** They aren't: same shoe. Validation models this exactly, so the reported win rates are honest. But the in-app "Est. win %" is the optimizer's internal number, not the validated one.
+- **v2 conditions only on your hand results, not on the exact cards.** Two "won" hands can mean different things for the opponent (blackjack is its own class, but a dealer bust vs a 20 beating 19 aren't distinguished). The approximation costs a little; the validated numbers include that cost.
+- **Simplifications in v2's model:** it assumes you can always afford to double/split when building scenarios (when you're nearly all-in you can't; validation plays it correctly). Side stakes are left out (v1 showed them worth under a point).
 - **Unconfirmed rules** (flags in Settings, tested in the report): dealer peek, whether the dealer draws when you've busted (changes card order after divergence), splitting K-Q, whether A-8/A-9 count as "9/10" for doubling. Also assumed: side-stake wins are paid at the end of the hand (not usable for a double), and you can't double/split/insure without enough chips behind the bet.
 - **Not modeled:** the 6-minute clock (assumed nobody times out), card counting within the shoe, opponents who change behavior based on their own running score.
 - **Terms of Use risk.** I couldn't find a 21 Rivals-specific rule on outside help. DraftKings' launch page for the game ([dknetwork.draftkings.com](https://dknetwork.draftkings.com/2026/11/10/21-rivals-draftkings-head-to-head-card-game-launch/)) doesn't mention one, and the main terms pages blocked automated fetching. But:
@@ -146,7 +152,8 @@ That plays the strategy against opponents it wasn't tuned for. Add `--quick` to 
 rivals/config.py      rules, opponent profiles, mix, settings storage
 rivals/core.py        numba engine: shoe, hands, expectimax, match sim, DP step
 rivals/strategy.py    dealer tables, basic strategy, split tables, exact side-stake math
-rivals/optimizer.py   opponent distributions, DP, plan caching
+rivals/corr.py        v2 correlation-aware optimizer (scenarios, history tree, DP)
+rivals/optimizer.py   v1 optimizer (independence assumption) + shared helpers
 rivals/validate.py    big simulation runs + statistics -> results/
 rivals/robustness.py  plan vs opponents it wasn't tuned for
 rivals/report.py      results/REPORT.md writer

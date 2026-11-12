@@ -25,7 +25,7 @@ STATE = {"advisor": None, "status": "starting", "error": None}
 
 def _load(settings=None):
     try:
-        STATE["status"] = "computing strategy (first run or new settings: ~30-90 s)..."
+        STATE["status"] = "computing strategy (first run or new settings: ~2-5 min)."
         if STATE["advisor"] is None:
             STATE["advisor"] = Advisor(settings)
         else:
@@ -75,7 +75,7 @@ def status():
 @app.route("/api/prehand", methods=["POST"])
 def prehand():
     d = request.get_json(force=True)
-    return jsonify(adv().prehand(int(d["hand"]), float(d["chips"])))
+    return jsonify(adv().prehand(int(d["hand"]), float(d["chips"]), d.get("results") or []))
 
 
 @app.route("/api/insurance", methods=["POST"])
