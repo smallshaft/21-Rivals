@@ -1,0 +1,555 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="21 Rivals">
+<title>21 Rivals Advisor</title>
+<style>
+:root {
+  --bg: #f3f2ef; --surface: #fcfcfb; --surface-2: #ebeae6; --border: #d6d5cf;
+  --text: #0b0b0b; --text-2: #52514e; --muted: #7a7973;
+  --accent: #2a78d6; --accent-ink: #ffffff;
+  --good: #0ca30c; --critical: #d03b3b; --warning: #b77b00;
+  --act-hit: #2a78d6; --act-stand: #4a4a46; --act-double: #b25e09; --act-split: #7a4cc4;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #111110; --surface: #1a1a19; --surface-2: #262624; --border: #3a3a37;
+    --text: #f0efec; --text-2: #c3c2b7; --muted: #8f8e86;
+    --accent: #3987e5; --accent-ink: #ffffff;
+    --good: #2fbf2f; --critical: #ef6262; --warning: #f0a92a;
+    --act-hit: #3987e5; --act-stand: #6b6b66; --act-double: #d97a1c; --act-split: #9a6fe0;
+  }
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; background: var(--bg); color: var(--text);
+  font: 16px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 560px; margin: 0 auto; padding: 12px 16px 96px; }
+nav { position: fixed; bottom: 0; left: 0; right: 0; display: flex; background: var(--surface);
+  border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); z-index: 5; }
+nav button { flex: 1; border: 0; background: none; color: var(--text-2); font-size: 15px;
+  padding: 14px 0; font-weight: 600; }
+nav button.on { color: var(--accent); }
+h1 { font-size: 20px; margin: 4px 0 12px; }
+h2 { font-size: 17px; margin: 18px 0 8px; }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 14px; margin-bottom: 12px; }
+.row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.row > * { flex: 1; min-width: 0; }
+label { font-size: 13px; color: var(--text-2); display: block; margin-bottom: 4px; }
+input, select, textarea { width: 100%; font-size: 20px; padding: 10px 12px; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+textarea { font: 13px/1.3 ui-monospace, Menlo, monospace; min-height: 160px; }
+button.big { width: 100%; font-size: 20px; font-weight: 700; padding: 16px; border-radius: 12px; border: 0;
+  background: var(--accent); color: var(--accent-ink); margin-top: 10px; }
+button.sec { width: 100%; font-size: 16px; padding: 12px; border-radius: 12px; border: 1px solid var(--border);
+  background: var(--surface-2); color: var(--text); margin-top: 8px; font-weight: 600; }
+.seg { display: flex; gap: 6px; }
+.seg button { flex: 1; font-size: 20px; font-weight: 700; padding: 12px 0; border-radius: 10px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text); }
+.seg button.on { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.pad { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 10px; }
+.pad button { font-size: 26px; font-weight: 800; padding: 18px 0; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface); color: var(--text); }
+.pad button:active { background: var(--accent); color: var(--accent-ink); }
+.prompt { font-size: 18px; font-weight: 700; margin-top: 6px; }
+.hand { font-size: 15px; color: var(--text-2); margin-top: 4px; min-height: 22px; }
+.betnum { font-size: 56px; font-weight: 800; line-height: 1; margin: 4px 0; }
+.kv { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px dashed var(--border); }
+.kv:last-child { border-bottom: 0; }
+.kv b { font-variant-numeric: tabular-nums; }
+.action { text-align: center; font-size: 54px; font-weight: 900; color: #fff; border-radius: 16px; padding: 18px 0; margin: 10px 0 6px; letter-spacing: 1px; }
+.a-HIT { background: var(--act-hit); } .a-STAND { background: var(--act-stand); }
+.a-DOUBLE { background: var(--act-double); } .a-SPLIT { background: var(--act-split); }
+.a-DONE, .a-BUST, .a-BLACKJACK { background: var(--surface-2); color: var(--text); font-size: 34px; }
+.small { font-size: 13px; color: var(--text-2); }
+.tag { display: inline-block; font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 99px;
+  border: 1px solid var(--warning); color: var(--warning); }
+.good { color: var(--good); } .bad { color: var(--critical); }
+.verdict { border-left: 4px solid var(--text-2); padding: 8px 10px; background: var(--surface-2); border-radius: 6px; }
+.verdict.good { border-color: var(--good); color: var(--text); } .verdict.bad { border-color: var(--critical); color: var(--text); }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: left; padding: 6px 4px; border-bottom: 1px solid var(--border); }
+th { color: var(--text-2); font-weight: 600; }
+.hidden { display: none !important; }
+#chart { width: 100%; height: 200px; position: relative; }
+#chart svg { width: 100%; height: 100%; display: block; }
+#tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border);
+  padding: 4px 8px; border-radius: 6px; font-size: 13px; white-space: nowrap; }
+.banner { background: var(--surface-2); border-radius: 10px; padding: 8px 12px; margin-bottom: 10px; font-size: 14px; }
+</style>
+</head>
+<body>
+<main>
+  <div id="banner" class="banner hidden"></div>
+
+  <!-- ===================== ADVISOR ===================== -->
+  <section id="tab-advisor">
+    <div class="card">
+      <label>Hand</label>
+      <div class="seg" id="handSeg"></div>
+      <div class="row" style="margin-top:10px">
+        <div><label>My chips now</label><input id="chips" type="number" inputmode="decimal" value="1000"></div>
+      </div>
+      <button class="big" onclick="getBet()">Get bet</button>
+    </div>
+
+    <div id="betCard" class="card hidden">
+      <div class="small">BET</div>
+      <div class="betnum" id="betNum">-</div>
+      <div id="betSides"></div>
+      <div class="kv"><span>Est. win / tie / loss</span><b id="betProb">-</b></div>
+      <div class="small" style="margin-top:6px">Win estimate is the optimizer's internal model (it assumes the opponent's cards are independent of yours). The real simulated rate is on the Results tab.</div>
+      <details style="margin-top:8px"><summary class="small">I placed something different</summary>
+        <div class="row" style="margin-top:8px">
+          <div><label>Main bet</label><input id="placedBet" type="number" inputmode="decimal"></div>
+          <div><label>Perfect Pairs</label><input id="placedPP" type="number" inputmode="decimal"></div>
+          <div><label>4-Card Total</label><input id="placedFC" type="number" inputmode="decimal"></div>
+        </div>
+      </details>
+    </div>
+
+    <div id="playCard" class="card hidden">
+      <div class="prompt" id="prompt">Tap your first card</div>
+      <div class="hand" id="handLine"></div>
+      <div id="actionBox"></div>
+      <div id="choiceBox"></div>
+      <div class="pad" id="pad"></div>
+      <div class="row" style="margin-top:6px">
+        <button class="sec" onclick="undo()">Undo</button>
+        <button class="sec" onclick="handOver('Hand ended early')">Hand ended</button>
+      </div>
+    </div>
+
+    <div id="doneCard" class="card hidden">
+      <div class="prompt" id="doneMsg">Hand over</div>
+      <label style="margin-top:8px">Chips after this hand</label>
+      <input id="chipsAfter" type="number" inputmode="decimal">
+      <button class="big" id="nextBtn" onclick="nextHand()">Next hand</button>
+    </div>
+  </section>
+
+  <!-- ===================== LOG ===================== -->
+  <section id="tab-log" class="hidden">
+    <h1>Log a match</h1>
+    <div class="card">
+      <label>Result</label>
+      <div class="seg" id="resSeg">
+        <button data-v="W" onclick="pickRes('W')">Win</button>
+        <button data-v="L" onclick="pickRes('L')">Loss</button>
+        <button data-v="T" onclick="pickRes('T')">Tie</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>Entry ($)</label><select id="logEntry"></select></div>
+        <div><label>Date</label><input id="logDate" type="date"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label>My final chips</label><input id="logMe" type="number" inputmode="decimal"></div>
+        <div><label>Opponent final chips</label><input id="logOpp" type="number" inputmode="decimal"></div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div><label><input type="checkbox" id="logFollowed" checked style="width:auto"> Followed the advice on every hand</label></div>
+      </div>
+      <label style="margin-top:8px">Notes</label><input id="logNotes" type="text">
+      <button class="big" onclick="saveMatch()">Save match</button>
+      <div id="logMsg" class="small"></div>
+    </div>
+    <h2>History</h2>
+    <div class="card"><table id="histTable"></table></div>
+  </section>
+
+  <!-- ===================== RESULTS ===================== -->
+  <section id="tab-dash" class="hidden">
+    <h1>Results</h1>
+    <div class="card" id="dashTop"></div>
+    <div class="card">
+      <div class="small">Cumulative profit ($), each logged match</div>
+      <div id="chart"><div id="tip" class="hidden"></div></div>
+    </div>
+    <div class="card"><div class="small">By entry size</div><table id="entryTable"></table></div>
+    <div class="card" id="poolCard"></div>
+    <div class="card small">
+      <a href="/cheatsheet.pdf" target="_blank">Printable cheat sheet (PDF)</a> &middot;
+      <a href="/report" target="_blank">Full simulation report</a>
+    </div>
+  </section>
+
+  <!-- ===================== SETTINGS ===================== -->
+  <section id="tab-settings" class="hidden">
+    <h1>Settings</h1>
+    <div class="card">
+      <div class="small">Opponent population mix (weights, auto-normalized). Changing this re-optimizes the strategy (30-90 s).</div>
+      <div id="mixBox"></div>
+    </div>
+    <div class="card">
+      <div class="small">Rule flags (assumptions not confirmed in the app)</div>
+      <div id="ruleBox"></div>
+    </div>
+    <div class="card">
+      <div class="row">
+        <div><label>Default entry ($)</label><select id="setEntry"></select></div>
+        <div><label>Objective</label><select id="setObj">
+          <option value="money">Maximize $ (ties count as refund)</option>
+          <option value="winprob">Maximize P(win) only</option></select></div>
+      </div>
+    </div>
+    <div class="card">
+      <details><summary class="small">Advanced: opponent profile parameters (JSON)</summary>
+        <textarea id="profBox"></textarea></details>
+    </div>
+    <button class="big" onclick="saveSettings()">Save &amp; re-optimize</button>
+    <div id="setMsg" class="small" style="margin-top:8px"></div>
+  </section>
+</main>
+
+<nav>
+  <button data-tab="advisor" class="on" onclick="tab('advisor')">Advisor</button>
+  <button data-tab="log" onclick="tab('log')">Log</button>
+  <button data-tab="dash" onclick="tab('dash')">Results</button>
+  <button data-tab="settings" onclick="tab('settings')">Settings</button>
+</nav>
+
+<script>
+const $ = id => document.getElementById(id);
+const RANKS = [1,2,3,4,5,6,7,8,9,10];
+const rname = r => r === 1 ? 'A' : (r === 10 ? '10' : String(r));
+let SET = null;
+
+async function api(path, body, method) {
+  const opt = body !== undefined ? {method: method || 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)} : {method: method || 'GET'};
+  const r = await fetch(path, opt);
+  const j = await r.json();
+  if (j.error) { banner('Error: ' + j.error); throw new Error(j.error); }
+  return j;
+}
+function banner(msg) { const b = $('banner'); if (!msg) { b.classList.add('hidden'); return; } b.textContent = msg; b.classList.remove('hidden'); }
+function pct(x, d=1) { return x == null ? '-' : (100 * x).toFixed(d) + '%'; }
+function money(x) { return (x < 0 ? '-$' : '$') + Math.abs(x).toFixed(2); }
+
+function tab(name) {
+  for (const s of ['advisor','log','dash','settings']) $('tab-' + s).classList.toggle('hidden', s !== name);
+  document.querySelectorAll('nav button').forEach(b => b.classList.toggle('on', b.dataset.tab === name));
+  if (name === 'dash') loadDash();
+  if (name === 'log') loadHist();
+  if (name === 'settings') loadSettings();
+}
+
+async function pollStatus() {
+  try {
+    const s = await (await fetch('/api/status')).json();
+    if (s.status === 'ready') { banner(null); return; }
+    banner(s.status === 'error' ? 'Strategy failed to load: ' + s.error : 'Loading: ' + s.status);
+  } catch (e) { banner('Server not reachable'); }
+  setTimeout(pollStatus, 2000);
+}
+
+/* ------------------------- ADVISOR ------------------------- */
+let S = null;
+function resetHandState() {
+  S = {cards: [], up: null, ppcat: null, ins: null, split: false, sub: [[], []], subDbl: [false, false],
+       active: 0, doubled: false, stage: 'cards', hist: []};
+}
+let HAND = 1;
+function drawHandSeg() {
+  $('handSeg').innerHTML = [1,2,3,4,5].map(h => `<button class="${h===HAND?'on':''}" onclick="HAND=${h};drawHandSeg()">${h}</button>`).join('');
+}
+function placed() {
+  return {bet: +$('placedBet').value, pp: +$('placedPP').value || 0, fc: +$('placedFC').value || 0};
+}
+async function getBet() {
+  const chips = +$('chips').value;
+  const r = await api('/api/prehand', {hand: HAND, chips});
+  $('betCard').classList.remove('hidden');
+  $('doneCard').classList.add('hidden');
+  $('betNum').textContent = r.bet ? r.bet.toLocaleString() + (r.allin ? '  (ALL IN)' : '') : '-';
+  let sides = '';
+  sides += `<div class="kv"><span>Perfect Pairs</span><b>${r.pp ? r.pp : 'none'}</b></div>`;
+  sides += `<div class="kv"><span>4-Card Total</span><b>${r.fc ? r.fc : 'none'}</b></div>`;
+  $('betSides').innerHTML = sides;
+  $('betProb').textContent = r.win != null ? `${pct(r.win)} / ${pct(r.tie)} / ${pct(r.loss)}` : '-';
+  $('placedBet').value = r.bet; $('placedPP').value = r.pp; $('placedFC').value = r.fc;
+  resetHandState();
+  $('playCard').classList.remove('hidden');
+  render();
+}
+function baseState() {
+  const p = placed();
+  return {hand: HAND, chips: +$('chips').value, bet: p.bet, pp: p.pp, fc: p.fc, pp_cat: S.ppcat,
+          cards: S.cards, up: S.up, insurance: !!S.ins, split: S.split, sub: S.sub,
+          sub_doubled: S.subDbl, active: S.active};
+}
+function snapshot() { S.hist.push(JSON.stringify({...S, hist: undefined})); }
+function undo() {
+  if (!S.hist.length) return;
+  const h = S.hist.pop(); const keep = S.hist; S = JSON.parse(h); S.hist = keep; render();
+}
+function pad(on) {
+  $('pad').innerHTML = on ? RANKS.map(r => `<button onclick="tapCard(${r})">${rname(r)}</button>`).join('') : '';
+}
+function handLine() {
+  let s = '';
+  if (S.split) s = `Split: [${S.sub[0].map(rname).join(' ')}]  [${S.sub[1].map(rname).join(' ')}]`;
+  else if (S.cards.length) s = 'You: ' + S.cards.map(rname).join(' ');
+  if (S.up) s += (s ? '   ' : '') + 'Dealer: ' + rname(S.up);
+  $('handLine').textContent = s;
+}
+function setPrompt(t) { $('prompt').textContent = t; }
+
+async function tapCard(r) {
+  snapshot();
+  if (S.stage === 'cards') {
+    if (S.cards.length < 2) S.cards.push(r); else S.up = r;
+  } else if (S.stage === 'hit') {
+    if (S.split) S.sub[S.active].push(r); else S.cards.push(r);
+  }
+  await render();
+}
+function chooseHtml(title, opts) {
+  return `<div class="prompt">${title}</div><div class="seg" style="margin-top:8px">` +
+    opts.map(o => `<button onclick="${o[1]}">${o[0]}</button>`).join('') + '</div>';
+}
+async function render() {
+  handLine();
+  $('actionBox').innerHTML = ''; $('choiceBox').innerHTML = '';
+  const p = placed();
+  if (S.stage === 'cards') {
+    if (S.cards.length < 2) { setPrompt(S.cards.length ? 'Tap your 2nd card' : 'Tap your 1st card'); pad(true); return; }
+    if (!S.up) { setPrompt('Tap dealer upcard'); pad(true); return; }
+    S.stage = 'pp';
+  }
+  if (S.stage === 'pp') {
+    if (p.pp > 0 && S.cards[0] === S.cards[1] && S.ppcat === null) {
+      setPrompt(''); pad(false);
+      $('choiceBox').innerHTML = chooseHtml('Pair! Perfect Pairs result?',
+        [['Mixed', 'S.ppcat=1;S.stage="ins";render()'], ['Same color', 'S.ppcat=2;S.stage="ins";render()'], ['Perfect', 'S.ppcat=3;S.stage="ins";render()']]);
+      return;
+    }
+    S.stage = 'ins';
+  }
+  if (S.stage === 'ins') {
+    if (S.up === 1 && S.ins === null) {
+      const r = await api('/api/insurance', baseState());
+      if (r.offered) {
+        setPrompt(''); pad(false);
+        $('actionBox').innerHTML = `<div class="action a-${r.take ? 'DOUBLE' : 'STAND'}" style="font-size:34px">${r.take ? 'TAKE INSURANCE' : 'NO INSURANCE'}</div>`;
+        $('choiceBox').innerHTML = chooseHtml('What did you do?',
+          [['Took it', 'snapshot();S.ins=true;S.stage="act";render()'], ['Declined', 'snapshot();S.ins=false;S.stage="act";render()']]) +
+          `<button class="sec" onclick="handOver('Dealer had blackjack')">Dealer had blackjack (hand over)</button>`;
+        return;
+      }
+      S.ins = false;
+    }
+    S.stage = 'act';
+  }
+  if (S.stage === 'act' || S.stage === 'hit') {
+    const r = await api('/api/action', baseState());
+    showAction(r);
+  }
+}
+function showAction(r) {
+  const a = r.action;
+  let html = `<div class="action a-${a}">${a}</div>`;
+  const info = [];
+  if (r.total) info.push(`${r.soft ? 'soft ' : ''}${r.total}`);
+  if (r.tossup) info.push(`<span class="small">toss-up: options within 0.2% - either is fine</span>`);
+  else if (r.deviation) info.push(`<span class="tag">Not basic strategy (basic: ${r.basic}) - match situation</span>`);
+  if (r.why) info.push(r.why);
+  html += `<div class="small" style="text-align:center">${info.join(' &middot; ')}</div>`;
+  if (r.options) {
+    html += '<table style="margin-top:6px"><tr><th>Option</th><th>Est. win</th><th>Match EV</th></tr>' +
+      Object.entries(r.options).sort((x, y) => y[1].ev - x[1].ev)
+        .map(([k, v]) => `<tr><td>${k}</td><td>${pct(v.win)}</td><td>${v.ev >= 0 ? '+' : ''}${v.ev.toFixed(3)}</td></tr>`).join('') + '</table>';
+  }
+  $('actionBox').innerHTML = html;
+  $('playCard').scrollIntoView({behavior: 'smooth', block: 'start'});
+  // what happens next
+  if (a === 'HIT' || a === 'DOUBLE') {
+    S.stage = 'hit';
+    if (a === 'DOUBLE') {
+      setPrompt('Tap the card you got (double)');
+      pad(true);
+      $('pad').querySelectorAll('button').forEach(b => {
+        const r0 = +(b.textContent === 'A' ? 1 : b.textContent);
+        b.onclick = () => doubleCard(r0);
+      });
+    } else { setPrompt('Tap the card you got'); pad(true); }
+    return;
+  }
+  if (a === 'SPLIT') {
+    snapshot();
+    S.split = true; S.sub = [[S.cards[0]], [S.cards[1]]]; S.active = 0; S.stage = 'hit';
+    setTimeout(() => { setPrompt('Split! Tap the card on hand 1'); handLine(); pad(true);
+      $('actionBox').innerHTML = `<div class="action a-SPLIT">SPLIT</div>`; }, 0);
+    return;
+  }
+  // STAND / BUST / DONE / BLACKJACK -> this (sub)hand is finished
+  pad(false);
+  if (S.split && S.active === 0) {
+    $('choiceBox').innerHTML = `<button class="big" onclick="snapshot();S.active=1;S.stage='hit';setPrompt('Tap the card on hand 2');handLine();pad(true);$('actionBox').innerHTML=''">Next: split hand 2</button>`;
+    setPrompt('Split hand 1 done');
+    return;
+  }
+  setPrompt('');
+  $('choiceBox').innerHTML = `<button class="big" onclick="handOver()">Hand finished</button>`;
+}
+async function doubleCard(r) {
+  snapshot();
+  if (S.split) { S.sub[S.active].push(r); S.subDbl[S.active] = true; }
+  else { S.cards.push(r); S.doubled = true; }
+  handLine(); pad(false);
+  if (S.split && S.active === 0) {
+    $('actionBox').innerHTML = '<div class="action a-DONE">DOUBLED</div>';
+    $('choiceBox').innerHTML = `<button class="big" onclick="snapshot();S.active=1;S.stage='hit';setPrompt('Tap the card on hand 2');handLine();pad(true);$('actionBox').innerHTML='';$('choiceBox').innerHTML=''">Next: split hand 2</button>`;
+    setPrompt('');
+    return;
+  }
+  handOver('Doubled - hand finished');
+}
+function handOver(msg) {
+  $('playCard').classList.add('hidden');
+  $('doneCard').classList.remove('hidden');
+  $('doneMsg').textContent = (msg || 'Hand over') + (HAND >= 5 ? ' - that was hand 5.' : '');
+  $('chipsAfter').value = '';
+  $('nextBtn').textContent = HAND >= 5 ? 'Match over: log it' : 'Next hand';
+  setTimeout(() => $('chipsAfter').focus(), 50);
+}
+function nextHand() {
+  const v = $('chipsAfter').value;
+  if (v === '') { $('chipsAfter').focus(); return; }
+  if (HAND >= 5) {
+    $('logMe').value = v; HAND = 1; drawHandSeg(); $('chips').value = 1000;
+    $('doneCard').classList.add('hidden'); $('betCard').classList.add('hidden');
+    tab('log'); return;
+  }
+  HAND += 1; drawHandSeg(); $('chips').value = v;
+  getBet();
+}
+
+/* ------------------------- LOG ------------------------- */
+let RES = null;
+function pickRes(v) { RES = v; document.querySelectorAll('#resSeg button').forEach(b => b.classList.toggle('on', b.dataset.v === v)); }
+async function saveMatch() {
+  if (!RES) { $('logMsg').textContent = 'Pick Win / Loss / Tie.'; return; }
+  await api('/api/matches', {entry: +$('logEntry').value, result: RES, my_chips: $('logMe').value,
+    opp_chips: $('logOpp').value, played_on: $('logDate').value, followed: $('logFollowed').checked ? 1 : 0,
+    notes: $('logNotes').value});
+  $('logMsg').textContent = 'Saved.'; RES = null; pickRes(null);
+  $('logMe').value = ''; $('logOpp').value = ''; $('logNotes').value = '';
+  loadHist();
+}
+async function loadHist() {
+  const ms = await api('/api/matches');
+  $('histTable').innerHTML = '<tr><th>Date</th><th>$</th><th>Res</th><th>Me</th><th>Opp</th><th></th></tr>' +
+    ms.slice().reverse().map(m => `<tr><td>${m.played_on}</td><td>${m.entry}</td><td>${m.result}</td>` +
+      `<td>${m.my_chips ?? ''}</td><td>${m.opp_chips ?? ''}</td>` +
+      `<td><a href="#" onclick="delMatch(${m.id});return false">delete</a></td></tr>`).join('');
+}
+async function delMatch(id) { if (!confirm('Delete this match?')) return; await api('/api/matches/' + id, undefined, 'DELETE'); loadHist(); }
+
+/* ------------------------- DASHBOARD ------------------------- */
+async function loadDash() {
+  const d = await api('/api/dashboard');
+  const r = d.real, s = d.sim;
+  let h = `<div class="kv"><span>Matches logged</span><b>${r.n} (${r.wins}W ${r.losses}L ${r.ties}T)</b></div>`;
+  h += `<div class="kv"><span>Real win % of decided</span><b>${pct(r.dec_rate)}</b></div>`;
+  h += `<div class="kv"><span>99% confidence range</span><b>${r.ci99 ? pct(r.ci99[0]) + ' to ' + pct(r.ci99[1]) : '-'}</b></div>`;
+  h += `<div class="kv"><span>Sim prediction (default mix)</span><b>${s ? pct(s.dec_rate) : 'run validation'}</b></div>`;
+  h += `<div class="kv"><span>Break-even</span><b>${pct(d.breakeven, 2)}</b></div>`;
+  h += `<div class="kv"><span>Profit</span><b class="${r.profit >= 0 ? 'good' : 'bad'}">${money(r.profit)}</b></div>`;
+  if (d.verdict) {
+    const cls = d.verdict.includes('profitable with') ? 'good' : (d.verdict.includes('LOSING') ? 'bad' : '');
+    const icon = cls === 'good' ? '&#10003; ' : (cls === 'bad' ? '&#9888; ' : '');
+    h += `<div class="verdict ${cls}" style="margin-top:10px">${icon}${d.verdict}</div>`;
+  }
+  $('dashTop').innerHTML = h;
+  $('entryTable').innerHTML = '<tr><th>Entry</th><th>N</th><th>Win% dec.</th><th>Profit</th><th>ROI</th></tr>' +
+    Object.entries(d.by_entry).map(([e, v]) => `<tr><td>$${e}</td><td>${v.n}</td><td>${pct(v.dec_rate)}</td><td>${money(v.profit)}</td><td>${pct(v.roi)}</td></tr>`).join('');
+  if (d.pool) {
+    $('poolCard').innerHTML = `<div class="small">Estimated opponent pool from ${d.pool.n} logged opponent scores</div>` +
+      '<table>' + Object.entries(d.pool.weights).map(([k, v]) => `<tr><td>${d.pool.names[k]}</td><td>${pct(v)}</td></tr>`).join('') +
+      `<tr><th>Sharp share</th><th>${pct(d.pool.sharp_share)}</th></tr></table><div class="small" style="margin-top:6px">${d.pool.note}</div>`;
+  } else $('poolCard').innerHTML = '<div class="small">Log opponent final chips to estimate the real sharp/casual mix.</div>';
+  drawChart(d.pnl);
+}
+function drawChart(pts) {
+  const box = $('chart'); const tip = $('tip');
+  box.querySelectorAll('svg').forEach(e => e.remove());
+  if (!pts.length) { tip.classList.add('hidden'); return; }
+  const W = box.clientWidth, H = box.clientHeight, L = 44, R = 10, T = 10, B = 22;
+  const ys = pts.map(p => p.pnl).concat([0]);
+  let lo = Math.min(...ys), hi = Math.max(...ys); if (hi === lo) { hi += 1; lo -= 1; }
+  const pad = (hi - lo) * 0.08; lo -= pad; hi += pad;
+  const x = i => L + (pts.length === 1 ? (W - L - R) / 2 : i * (W - L - R) / (pts.length - 1));
+  const y = v => T + (hi - v) * (H - T - B) / (hi - lo);
+  const css = getComputedStyle(document.documentElement);
+  const c = n => css.getPropertyValue(n).trim();
+  let g = '';
+  for (let k = 0; k <= 4; k++) {
+    const v = lo + (hi - lo) * k / 4;
+    g += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="${c('--border')}" stroke-width="1"/>` +
+         `<text x="${L - 6}" y="${y(v) + 4}" font-size="11" text-anchor="end" fill="${c('--muted')}">${(hi - lo) < 8 ? v.toFixed(2) : v.toFixed(0)}</text>`;
+  }
+  g += `<line x1="${L}" x2="${W - R}" y1="${y(0)}" y2="${y(0)}" stroke="${c('--text-2')}" stroke-width="1" stroke-dasharray="3 3"/>`;
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.pnl).toFixed(1)}`).join('');
+  g += `<path d="${path}" fill="none" stroke="${c('--accent')}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+  g += `<line id="xh" y1="${T}" y2="${H - B}" stroke="${c('--muted')}" stroke-width="1" visibility="hidden"/>`;
+  g += `<circle id="dot" r="4" fill="${c('--accent')}" stroke="${c('--surface')}" stroke-width="2" visibility="hidden"/>`;
+  g += `<text x="${L}" y="${H - 6}" font-size="11" fill="${c('--muted')}">match 1</text><text x="${W - R}" y="${H - 6}" font-size="11" text-anchor="end" fill="${c('--muted')}">match ${pts.length}</text>`;
+  g += `<rect x="${L}" y="0" width="${W - L - R}" height="${H}" fill="transparent" id="hit"/>`;
+  box.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}">${g}</svg>`);
+  const svg = box.querySelector('svg');
+  const move = ev => {
+    const rect = svg.getBoundingClientRect();
+    const px = (ev.touches ? ev.touches[0].clientX : ev.clientX) - rect.left;
+    let i = Math.round((px - L) / ((W - L - R) / Math.max(1, pts.length - 1)));
+    i = Math.max(0, Math.min(pts.length - 1, i));
+    const xh = svg.querySelector('#xh'), dot = svg.querySelector('#dot');
+    xh.setAttribute('x1', x(i)); xh.setAttribute('x2', x(i)); xh.setAttribute('visibility', 'visible');
+    dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(pts[i].pnl)); dot.setAttribute('visibility', 'visible');
+    tip.textContent = `#${i + 1} ${pts[i].date}: ${money(pts[i].pnl)}`;
+    tip.classList.remove('hidden');
+    tip.style.left = Math.min(W - 150, Math.max(0, x(i) - 60)) + 'px'; tip.style.top = '0px';
+  };
+  svg.addEventListener('mousemove', move); svg.addEventListener('touchmove', move, {passive: true});
+  svg.addEventListener('touchstart', move, {passive: true});
+  svg.addEventListener('mouseleave', () => { tip.classList.add('hidden'); svg.querySelector('#xh').setAttribute('visibility', 'hidden'); svg.querySelector('#dot').setAttribute('visibility', 'hidden'); });
+}
+
+/* ------------------------- SETTINGS ------------------------- */
+const RULE_LABELS = {
+  dealer_peeks: 'Dealer peeks for blackjack', double_after_split: 'Double after split allowed',
+  split_by_value: 'Can split any two 10-value cards (K-Q)', double_soft_low: 'A-8 / A-9 count as 9 / 10 for doubling',
+  dealer_draws_if_all_bust: 'Dealer still draws if you bust',
+};
+async function loadSettings() {
+  SET = await api('/api/settings');
+  $('mixBox').innerHTML = SET.model_keys.map(k => `<div class="row" style="margin-top:8px"><div style="flex:2">${SET.model_names[k]}</div>` +
+    `<div><input type="number" step="0.025" min="0" id="mix_${k}" value="${SET.mix[k] ?? 0}"></div></div>`).join('');
+  $('ruleBox').innerHTML = Object.keys(RULE_LABELS).map(k => `<label style="font-size:15px;color:var(--text);margin-top:8px"><input type="checkbox" style="width:auto" id="rule_${k}" ${SET.rules[k] ? 'checked' : ''}> ${RULE_LABELS[k]}</label>`).join('');
+  const opts = SET.entries.map(e => `<option value="${e}">$${e}</option>`).join('');
+  $('setEntry').innerHTML = opts; $('setEntry').value = SET.entry; $('setObj').value = SET.objective;
+  $('profBox').value = JSON.stringify(SET.profiles, null, 1);
+}
+async function saveSettings() {
+  const mix = {}; SET.model_keys.forEach(k => mix[k] = +$('mix_' + k).value || 0);
+  const rules = {...SET.rules}; Object.keys(RULE_LABELS).forEach(k => rules[k] = $('rule_' + k).checked);
+  let profiles; try { profiles = JSON.parse($('profBox').value); } catch (e) { $('setMsg').textContent = 'Profile JSON is invalid.'; return; }
+  await api('/api/settings', {mix, rules, profiles, entry: +$('setEntry').value, objective: $('setObj').value});
+  $('setMsg').textContent = 'Saved. Re-optimizing in the background...';
+  initLogEntry(+$('setEntry').value);
+  pollStatus();
+}
+function initLogEntry(def) {
+  $('logEntry').innerHTML = [1, 5, 10, 20].map(e => `<option value="${e}">$${e}</option>`).join('');
+  $('logEntry').value = def || 1;
+}
+
+/* init */
+drawHandSeg();
+$('logDate').value = new Date().toISOString().slice(0, 10);
+fetch('/api/settings').then(r => r.json()).then(s => initLogEntry(s.entry));
+pollStatus();
+</script>
+</body>
+</html>
