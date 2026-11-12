@@ -75,7 +75,7 @@ def status():
 @app.route("/api/prehand", methods=["POST"])
 def prehand():
     d = request.get_json(force=True)
-    return jsonify(adv().prehand(int(d["hand"]), float(d["chips"]), d.get("results") or []))
+    return jsonify(adv().prehand(int(d["hand"]), float(d["chips"]), d.get("history") or []))
 
 
 @app.route("/api/insurance", methods=["POST"])

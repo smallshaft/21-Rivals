@@ -1,10 +1,12 @@
 """
 Live advisor used by the web app (v2, correlation-aware).
 
-Before each hand you give it the hand number, your chips, and your results on
-the previous hands of this match (the app records these automatically). Your
-result history tells it a lot about your opponent, because you both got the
-same cards: it looks up the opponent's likely chips and picks the bet.
+Before each hand you give it the hand number, your chips, and what happened on
+the previous hands of this match: your two cards, the dealer's upcard, your
+result and how the dealer finished (the app records these as you play).
+Because you both got the same cards, that tells it a lot about your opponent:
+a 20 vs 6 that won on a dealer bust almost surely won for them too; a 16 vs 10
+is a coin flip, since many players hit it.
 
 In-hand play is basic strategy (the same play the plan was optimized and
 validated with). Cards are entered by rank: 1 = Ace, 10 = any ten/face.
@@ -17,7 +19,7 @@ import numpy as np
 
 from . import core
 from .config import Settings, load_settings, MODEL_NAMES
-from .corr import get_tree_plan, TreePlan, node_id, history_code, NC, CLASS_NAMES, NDEC, OFF, NCLS
+from .corr import get_tree_plan, TreePlan, node_id, history_code, NC, BUCKET_NAMES
 from .strategy import build_tables, ACT_NAMES
 
 
@@ -46,19 +48,25 @@ class Advisor:
         with self.lock:
             self.settings, self.T, self.tp = settings, T, tp
         self.prehand(1, 1000, [])
+        self.prehand(2, 1010, [{"x": 1, "dealer": 5, "cards": [10, 10], "up": 6}])
         self.action({"hand": 1, "chips": 1000, "bet": 10, "cards": [10, 6], "up": 10})
 
     # ------------------------------------------------------------------
-    def prehand(self, hand: int, chips: float, results=None) -> dict:
+    def prehand(self, hand: int, chips: float, history=None) -> dict:
+        """history: one entry per finished hand this match:
+        {"x": result in units of your bet, "dealer": 0..7 (17,18,19,20,21,bust,BJ,didn't play out),
+         "cards": [r1, r2] or None, "up": rank or None}"""
         tp = self.tp
         d = int(hand) - 1
-        results = list(results or [])
+        history = list(history or [])
         note = None
-        if len(results) != d:
-            note = (f"Results for {d} earlier hand(s) are needed for the best bet; got {len(results)}. "
+        if len(history) != d:
+            note = (f"Results for {d} earlier hand(s) are needed for the best bet; got {len(history)}. "
                     "Missing ones were treated as pushes.")
-            results = (results + [0.0] * d)[:d]
-        nd = node_id(d, history_code(results))
+            history = (history + [{"x": 0, "dealer": 3}] * d)[:d]
+        buckets = [tp.bucket(hh.get("cards"), hh.get("up"), float(hh.get("x", 0)), int(hh.get("dealer", 7)))
+                   for hh in history]
+        nd = node_id(d, history_code(buckets))
         c = float(chips)
         if c < 10:
             return {"bet": 0, "note": "Under 10 chips: you can't bet."}
@@ -68,11 +76,13 @@ class Advisor:
         win, loss = float(tp.W[nd, cj]), float(tp.L[nd, cj])
         q = tp.opp_q[nd]
         last = tp.opp_last[nd]
-        types = {MODEL_NAMES.get(t, t): float(p) for t, p in zip(tp.types, tp.opp_type[nd])}
         opp = {"q10": q[0], "q25": q[1], "median": q[2], "q75": q[3], "q90": q[4],
                "last_up": float(last[0]), "last_same": float(last[1]), "last_down": float(last[2]),
-               "types": types, "history": [CLASS_NAMES[core.xclass(float(x))] for x in results],
-               "scenarios": int(tp.count[nd])}
+               "history": [BUCKET_NAMES[bk] for bk in buckets], "scenarios": int(tp.count[nd])}
+        if history:
+            hh = history[-1]
+            st = tp.hand_stat(hh.get("cards"), hh.get("up"), float(hh.get("x", 0)), int(hh.get("dealer", 7)))
+            opp["last_insync"] = {"up": float(st[0]), "same": float(st[1]), "down": float(st[2])}
         return {"bet": b, "pp": 0.0, "fc": 0.0, "win": win, "loss": loss,
                 "tie": max(0.0, 1 - win - loss), "allin": bool(b >= core.floor5(c)),
                 "opponent": opp, "note": note}

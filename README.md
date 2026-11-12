@@ -59,7 +59,7 @@ cd ~/21-Rivals && source .venv/bin/activate && caffeinate -i python -m web.app
 
 (`caffeinate -i` keeps the Mac from sleeping while the app runs. Stop it with Ctrl+C.)
 
-The **first** launch builds the strategy by simulating ~9 million matches (about 2–5 minutes, needs ~3 GB of free memory; later launches take seconds). The terminal prints something like:
+The precomputed strategy for the default settings ships in `results/`, so launch takes seconds. If you change Settings, it re-simulates ~9 million matches (about 2–5 minutes, ~3 GB of memory). The terminal prints something like:
 
 ```
   On this Mac:            http://localhost:8021
@@ -87,7 +87,7 @@ The Mac's IP can change when the router restarts. If the bookmark stops working,
 1. Hand 1: chips are 1000; tap **Get bet**.
 2. Tap your two cards, then the dealer's upcard. `10` covers 10/J/Q/K.
 3. It shows the action in big letters (basic strategy). After a HIT or DOUBLE, tap the card you got; it re-prompts. SPLIT walks you through hand 1, then hand 2. Insurance: always no.
-4. When the hand is over, type your chips after the hand and tap **Next hand**. The app works out how that hand went (lost / push / won / blackjack / won or lost a double) from your chips and bet.
+4. When the hand is over, tap **how the dealer finished** (17–21, Bust, Blackjack, or Didn't play), type your chips after the hand, and tap **Next hand**. The app works out your result from your chips and bet, and whether the hand was clear or ambiguous for your opponent from your cards, the upcard and the dealer's finish.
 5. For the next hand it shows the bet plus an **opponent estimate**: their likely chips right now and how likely they gained or lost on the last hand. Example: after your blackjack, there's a ~97% chance they gained too, because they got the same cards.
 6. After hand 5 it jumps to the Log tab.
 
@@ -126,18 +126,32 @@ That plays the strategy against opponents it wasn't tuned for. Add `--quick` to 
 - **Engine** (`rivals/core.py`, compiled with numba): exact rules. One fixed 6-deck shoe order per match. Each player reads the same card sequence from their own position, so identical decisions mean identical cards; after a divergence, each player's cards differ. Unit tests (`tests/test_engine.py`) prove this on hand-built shoes.
 - **Basic strategy** isn't typed in; it's derived by the engine's own expectimax with chip-EV as the objective, then checked against the published chart.
 - **Optimizer v2** (`rivals/corr.py`, used by the app). It prices in that you and your opponent get the same cards:
-  - It plays ~9 million matches on the real engine. In each, you play basic strategy and it records your result each hand; the opponent plays from the same shoe and it records their chips after every hand.
-  - Your result each hand goes in one of 6 classes: lost a double/split, lost, push, won, blackjack, won a double/split. Your sequence of classes so far is a "history". For every history it knows the actual distribution of the opponent's chips: how often they also won, by how much (their bet size), whether they drifted out of sync, and so on.
-  - A backward dynamic program over (history, your chips) picks each bet to maximize **expected profit per match** (+0.8 entry for a win, −1 for a loss, 0 for a tie; pure P(win) is a setting). Rare histories borrow statistics from their parent.
-  - In-hand play is basic strategy. Changing decisions would break the same-cards link the plan relies on, and v1's in-hand deviations were measured worth ~0. There are no side stakes or insurance in v2.
+  - It plays ~9 million matches on the real engine. In each, you play basic strategy and it records what you saw each hand: your starting hand (blackjack / pair / soft / hard total), the dealer's upcard, your result, and how the dealer finished. That's about 16,800 possible situations. The opponent plays their own style from the same shoe, and it records their chips after every hand.
+  - **Clear vs ambiguous hands.** For every situation it measures, on hand 1 (when both players are always in sync), how often the opponent moved the same way you did. For casual opponents:
+
+    | Situation | Casual opponent also won/lost |
+    |---|---|
+    | 20 vs 6, won on a dealer bust | won 98% |
+    | Doubled 10 vs 6, won on a bust | won ~100% |
+    | Blackjack | won 100% |
+    | 16 vs 5, stood and won | won 75–90% |
+    | 16 vs 10, won on a bust | won only ~64% (many players hit) |
+    | Split 8s vs 10, lost both | lost only 53–75% |
+
+    A hand is **clear** if at least 90% of in-sync opponents (at the default mix) moved the same way. Otherwise it's **ambiguous**.
+  - Each hand then becomes one of 8 buckets: lost a double/split, lost (clear), lost (ambiguous), push, won (clear), won (ambiguous), blackjack, won a double/split.
+  - Your sequence of buckets so far is a "history". For every history it knows the actual distribution of the opponent's chips: how often they won too, their bet sizes, whether they drifted off your cards after an ambiguous hand.
+  - A backward dynamic program over (history, your chips) picks each bet to maximize **expected profit per match**: +0.8 entry for a win, −1 for a loss, 0 for a tie. Pure P(win) is a setting. Rare histories borrow from their parent.
+  - In-hand play is basic strategy. Changing decisions would break the same-cards link, and v1's in-hand deviations were measured worth ~0. There are no side stakes or insurance in v2.
   - The plan's main move: bet the minimum on hand 1. Lose → the opponent probably lost more, so keep betting small. Win → they probably won more, so bet up to catch them.
+  - **Honest result:** the clear/ambiguous split makes the opponent estimates more accurate, but it didn't measurably raise the win rate over using your result alone (67.48% vs 67.48% in a 6M-match test). The bet size depends mostly on how much the opponent bet, which your cards can't reveal.
 - **Optimizer v1** (`rivals/optimizer.py`, kept for comparison): treated the opponent's final score as independent of your cards. That was wrong, and v2 replaces it.
 - **Validation** (`rivals/validate.py`): brute-force head-to-head matches with the real shared shoe. This, not the optimizer's internal estimate, is the source of every number in the report.
 
 ## 6. What this depends on (read this)
 
 - **Opponent models are guesses.** The edge comes almost entirely from opponents who *don't* shape their bets to win the match. Against someone doing roughly what this app does (the "near-mirror" test), you lose money after rake. The real pool is unknown until you log matches.
-- **v2 conditions only on your hand results, not on the exact cards.** Two "won" hands can mean different things for the opponent (blackjack is its own class, but a dealer bust vs a 20 beating 19 aren't distinguished). The approximation costs a little; the validated numbers include that cost.
+- **v2 groups situations into 8 buckets.** It knows a 16 vs 10 win is ambiguous and a 20 vs 6 win isn't, but every ambiguous win shares one bucket. Per-spot numbers are shown in the app; bets use the bucket.
 - **Simplifications in v2's model:** it assumes you can always afford to double/split when building scenarios (when you're nearly all-in you can't; validation plays it correctly). Side stakes are left out (v1 showed them worth under a point).
 - **Unconfirmed rules** (flags in Settings, tested in the report): dealer peek, whether the dealer draws when you've busted (changes card order after divergence), splitting K-Q, whether A-8/A-9 count as "9/10" for doubling. Also assumed: side-stake wins are paid at the end of the hand (not usable for a double), and you can't double/split/insure without enough chips behind the bet.
 - **Not modeled:** the 6-minute clock (assumed nobody times out), card counting within the shoe, opponents who change behavior based on their own running score.

@@ -30,8 +30,7 @@ COL = {"H": colors.HexColor("#ffffff"), "S": colors.HexColor("#d9d9d4"),
        "D": colors.HexColor("#f6c48e"), "P": colors.HexColor("#c8b4ec")}
 ROWS = [600, 750, 850, 900, 950, 970, 980, 990, 995, 1000, 1005, 1010, 1015, 1020, 1030, 1050, 1075,
         1100, 1150, 1250, 1400]
-GROUPS = ["Lost", "Push", "Won", "BJ / won 2+"]
-CLS2GROUP = [0, 0, 1, 2, 3, 3]        # class -> sheet column
+GROUPS = ["Lost", "Push", "Won", "BJ / won 2+"]   # = bucket ids 0..3 of the 'result' plan
 
 
 def sheet_table(tp):
@@ -40,7 +39,8 @@ def sheet_table(tp):
     tab = np.zeros((5, len(GROUPS), len(ROWS)))
     for d in range(1, 5):
         for g in range(len(GROUPS)):
-            nodes = [corr.OFF[d] + code for code in range(corr.NCLS ** d) if CLS2GROUP[code % corr.NCLS] == g]
+            nodes = [corr.OFF[d] + code for code in range(corr.NCLS ** d)
+                     if code % corr.NCLS == g and tp.count[corr.OFF[d] + code] > 0]
             w = tp.count[nodes].astype(float)
             for r, chips in enumerate(ROWS):
                 b = tp.bet[nodes, int(chips / core.CHIP)].astype(float)
@@ -59,19 +59,19 @@ def sheet_policy(tp, tab):
     for d in range(1, 5):
         for code in range(corr.NCLS ** d):
             nd = corr.OFF[d] + code
-            g = CLS2GROUP[code % corr.NCLS]
+            g = min(code % corr.NCLS, len(GROUPS) - 1)
             b = tab[d, g, ridx]
             b = np.minimum(b, 5.0 * np.floor(cgrid / 5.0 + 1e-9))
             B[nd] = np.maximum(b, 10.0)
     return B
 
 
-def evaluate(B, s, T, n=1_000_000):
+def evaluate(tabs, s, T, n=1_000_000):
     P = corr.tree_player_params()
     per = {}
     for i, k in enumerate(["sharp_a", "casual_a", "casual_b"]):
         w, _, _ = core.simulate(n, 4242 + i, O.NCHUNK, core.T_OPT, P, core.T_PARAM, s.profile(k).as_params(),
-                                T.R, T.D, T.act2, T.actN, T.splt, T.subd, B, B, B, np.zeros((6, 4)), O.NV,
+                                T.R, T.D, T.act2, T.actN, T.splt, T.subd, *tabs, O.NV,
                                 *O.dummy_plan_arrays())
         per[k] = summarize(*map(int, w.sum(axis=0)))
     return mixture(per, {k: s.mix.get(k, 0) for k in per})
@@ -89,10 +89,12 @@ def build(path=None):
     path = path or os.path.join(RESULTS_DIR, "cheatsheet.pdf")
     s = load_settings()
     T = build_tables(s.rules)
-    tp = corr.get_tree_plan(s, verbose=False)
+    app = corr.get_tree_plan(s, verbose=False)                       # what the app uses
+    tp = corr.get_tree_plan(s, verbose=False, bucket_mode="result")  # result-only version for paper
     tab = sheet_table(tp)
-    full = evaluate(tp.bet.astype(np.float64), s, T)
-    sheet = evaluate(sheet_policy(tp, tab), s, T)
+    full = evaluate(app.engine_tables(), s, T)
+    Bs = sheet_policy(tp, tab)
+    sheet = evaluate((Bs, Bs, Bs, tp.engine_tables()[3]), s, T)
     b0 = float(tp.bet[0, 400])
 
     W, H = landscape(letter)

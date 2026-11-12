@@ -297,6 +297,9 @@ def play_hand(shoe, ptr, c, hidx, ptype, P, pst, R, D, act2, actN, splt, subd,
     rec[1] = -1.0
     rec[2] = -1.0
     rec[3] = 0.0
+    rec[4] = 0.0
+    rec[5] = 1.0
+    rec[6] = 7.0
     if c < 10.0:
         return c, ptr
 
@@ -353,6 +356,8 @@ def play_hand(shoe, ptr, c, hidx, ptype, P, pst, R, D, act2, actN, splt, subd,
     hole = shoe[ptr + 3]
     ptr += 4
     u = cval(up)
+    rec[4] = start_cat(p1, p2)
+    rec[5] = u
     pp_net = 0.0
     if spp > 0:
         k = pp_cat(p1, p2)
@@ -438,6 +443,7 @@ def play_hand(shoe, ptr, c, hidx, ptype, P, pst, R, D, act2, actN, splt, subd,
     if dealer_bj and (peek or player_bj):
         main = 0.0 if player_bj else -b
         rec[0] = main / b
+        rec[6] = 6.0
         return c + main + side_net + ins_net, ptr
     if player_bj:
         rec[0] = 1.5
@@ -548,6 +554,12 @@ def play_hand(shoe, ptr, c, hidx, ptype, P, pst, R, D, act2, actN, splt, subd,
             if cval(card) == 1:
                 da = 1
     dt = best_total(dh, da)
+    if dealer_bj:
+        rec[6] = 6.0
+    elif alive or R[R_DRAWBUST] == 1:
+        rec[6] = 5.0 if dt > 21 else dt - 17.0
+    else:
+        rec[6] = 7.0      # dealer didn't play out (you busted)
 
     # ---------------- settle ----------------
     main = 0.0
@@ -664,16 +676,40 @@ def play_match_player(shoe, ptype, P, R, D, act2, actN, splt, subd,
         c, ptr = play_hand(shoe, ptr, c, row, ptype, P, pst, R, D, act2, actN, splt, subd,
                            bet_tab, pp_tab, fc_tab, Vall, rec)
         trace[h] = c
+        k = obs_key(rec)
+        trace[5 + h] = k
         if tree:
-            code = code * NCLS + xclass(rec[0])
+            # tree tables carry the observation -> class map in Vall[0] (Vall is unused in tree mode)
+            code = code * NCLS + int(Vall[0, k])
     return c
 
 
 # ---------------------------------------------------------------------------
 # Result-history tree (correlation-aware plan, corr.py)
 # ---------------------------------------------------------------------------
-NCLS = 6
-NODE_OFF = np.array([0, 1, 7, 43, 259, 1555, 9331])   # first node id at each depth
+NCLS = 8
+NODE_OFF = np.array([0, 1, 9, 73, 585, 4681, 37449])   # first node id at each depth (8 classes)
+NSTART, NDCAT = 35, 8
+NKEYS = NSTART * 10 * 6 * NDCAT                         # observation keys per hand
+
+
+@njit(cache=True)
+def start_cat(c1, c2):
+    """Your starting hand: 0 blackjack, 1-10 pair (by value), 11-18 soft A2..A9, 19-33 hard 5..19."""
+    v1, v2 = cval(c1), cval(c2)
+    if (v1 == 1 and v2 == 10) or (v1 == 10 and v2 == 1):
+        return 0
+    if v1 == v2:
+        return v1
+    if v1 == 1 or v2 == 1:
+        return 11 + (v1 + v2 - 1) - 2
+    return 19 + (v1 + v2) - 5
+
+
+@njit(cache=True)
+def obs_key(rec):
+    """What you saw on a hand: (start, upcard, your result class, dealer finish)."""
+    return ((int(rec[4]) * 10 + (int(rec[5]) - 1)) * 6 + xclass(rec[0])) * NDCAT + int(rec[6])
 
 
 @njit(cache=True)
@@ -699,8 +735,10 @@ def gen_scenarios(n, seed, nchunks, tB, PB, R, D, act2, actN, splt, subd,
     """n matches on fresh shoes: 'me' plays basic strategy with a flat 10 bet
     (doubles always affordable) and records each hand's result in units; the
     opponent plays its own strategy on the SAME shoe.  Returns
-    X[n,5] (my unit results), O[n] (opp final chips), OT[n,5] (opp chips after each hand)."""
+    X[n,5] (my unit results), K[n,5] (what I saw each hand, see obs_key),
+    O[n] (opp final chips), OT[n,5] (opp chips after each hand)."""
     X = np.zeros((n, 5), dtype=np.float32)
+    K = np.zeros((n, 5), dtype=np.int32)
     O = np.zeros(n, dtype=np.float32)
     OT = np.zeros((n, 5), dtype=np.float32)
     per = (n + nchunks - 1) // nchunks
@@ -713,9 +751,9 @@ def gen_scenarios(n, seed, nchunks, tB, PB, R, D, act2, actN, splt, subd,
         shoe = np.empty(52 * NDECK, dtype=np.int64)
         pa = np.zeros(6)
         pb = np.zeros(6)
-        rec = np.zeros(4)
-        tr = np.zeros(5)
-        tro = np.zeros(5)
+        rec = np.zeros(8)
+        tr = np.zeros(10)
+        tro = np.zeros(10)
         lo = ch * per
         hi = min(n, lo + per)
         for i in range(lo, hi):
@@ -727,12 +765,13 @@ def gen_scenarios(n, seed, nchunks, tB, PB, R, D, act2, actN, splt, subd,
             prev = 1000.0
             for h in range(5):
                 X[i, h] = (tr[h] - prev) / 10.0
+                K[i, h] = int(tr[5 + h])
                 prev = tr[h]
             O[i] = play_match_player(shoe, tB, PB, R, D, act2, actN, splt, subd,
                                      bet_b, pp_b, fc_b, Vall_b, pb, rec, tro)
             for h in range(5):
                 OT[i, h] = tro[h]
-    return X, O, OT
+    return X, K, O, OT
 
 
 @njit(parallel=True, cache=True)
@@ -752,8 +791,8 @@ def simulate(n, seed, nchunks, tA, PA, tB, PB, R, D, act2, actN, splt, subd,
         shoe = np.empty(52 * NDECK, dtype=np.int64)
         pstA = np.zeros(6)
         pstB = np.zeros(6)
-        rec = np.zeros(4)
-        tr = np.zeros(5)
+        rec = np.zeros(8)
+        tr = np.zeros(10)
         m = per + (1 if ch < n - per * nchunks else 0)
         for _ in range(m):
             make_shoe(shoe)
@@ -787,7 +826,7 @@ def sample_hands(n, seed, nchunks, P, R, D, act2, actN, splt, subd, dummy_tab, V
         shoe = np.empty(52 * NDECK, dtype=np.int64)
         pst = np.zeros(6)
         pst[0] = 10.0
-        rec = np.zeros(4)
+        rec = np.zeros(8)
         for _ in range(per):
             make_shoe(shoe)
             play_hand(shoe, 0, P[19], 0, T_PARAM, P, pst, R, D, act2, actN, splt, subd,

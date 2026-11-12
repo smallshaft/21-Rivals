@@ -126,7 +126,9 @@ th { color: var(--text-2); font-weight: 600; }
 
     <div id="doneCard" class="card hidden">
       <div class="prompt" id="doneMsg">Hand over</div>
-      <label style="margin-top:8px">Chips after this hand</label>
+      <label style="margin-top:8px">How did the dealer finish?</label>
+      <div class="pad" id="dealerPad" style="grid-template-columns: repeat(4, 1fr)"></div>
+      <label style="margin-top:10px">Chips after this hand</label>
       <input id="chipsAfter" type="number" inputmode="decimal">
       <button class="big" id="nextBtn" onclick="nextHand()">Next hand</button>
     </div>
@@ -253,24 +255,31 @@ function resetHandState() {
        active: 0, doubled: false, stage: 'cards', hist: []};
 }
 let HAND = 1;
-let RESULTS = [];          // your result (units of your bet) on each finished hand this match
-let CHIPS_BEFORE = 1000, BET_PLACED = 0;
+// what happened on each finished hand this match: {x: result in units of your bet,
+// dealer: 0-7 (17,18,19,20,21,bust,BJ,didn't play out), cards: [r1,r2], up: rank}
+let HIST = [];
+let CHIPS_BEFORE = 1000, DCAT = null;
 const RES_OPTS = [[-2, 'Lost a double/split'], [-1, 'Lost'], [0, 'Push'], [1, 'Won'], [1.5, 'Blackjack'], [2, 'Won a double/split']];
+const DEALER_OPTS = ['17', '18', '19', '20', '21', 'Bust', 'Blackjack', "Didn't play"];
 function resClass(x) { return x <= -2 ? -2 : x < 0 ? -1 : x === 0 ? 0 : x === 1.5 ? 1.5 : x <= 1 ? 1 : 2; }
 function drawHandSeg() {
   $('handSeg').innerHTML = [1,2,3,4,5].map(h => `<button class="${h===HAND?'on':''}" onclick="HAND=${h};drawHandSeg()">${h}</button>`).join('');
-  while (RESULTS.length < HAND - 1) RESULTS.push(0);
-  RESULTS = RESULTS.slice(0, HAND - 1);
-  $('histRow').innerHTML = RESULTS.length ? '<label>Your results so far (auto-filled; fix if wrong)</label>' +
-    RESULTS.map((x, i) => `<div class="row" style="margin-top:4px"><div style="flex:0 0 70px" class="small">Hand ${i + 1}</div><div><select style="font-size:16px;padding:6px" onchange="RESULTS[${i}]=+this.value">` +
-      RES_OPTS.map(([v, n]) => `<option value="${v}" ${resClass(x) === v ? 'selected' : ''}>${n}</option>`).join('') + '</select></div></div>').join('') : '';
+  while (HIST.length < HAND - 1) HIST.push({x: 0, dealer: 3, cards: null, up: null});
+  HIST = HIST.slice(0, HAND - 1);
+  const sel = 'style="font-size:15px;padding:6px"';
+  $('histRow').innerHTML = HIST.length ? '<label>Earlier hands this match (auto-filled; fix if wrong)</label>' +
+    HIST.map((e, i) => `<div class="row" style="margin-top:4px"><div style="flex:0 0 58px" class="small">Hand ${i + 1}${e.cards ? '<br>' + e.cards.map(rname).join(',') + ' v ' + rname(e.up) : ''}</div>` +
+      `<div><select ${sel} onchange="HIST[${i}].x=+this.value">` +
+      RES_OPTS.map(([v, n]) => `<option value="${v}" ${resClass(e.x) === v ? 'selected' : ''}>${n}</option>`).join('') + '</select></div>' +
+      `<div><select ${sel} onchange="HIST[${i}].dealer=+this.value">` +
+      DEALER_OPTS.map((n, v) => `<option value="${v}" ${e.dealer === v ? 'selected' : ''}>Dealer ${n}</option>`).join('') + '</select></div></div>').join('') : '';
 }
 function placed() {
   return {bet: +$('placedBet').value, pp: +$('placedPP').value || 0, fc: +$('placedFC').value || 0};
 }
 async function getBet() {
   const chips = +$('chips').value;
-  const r = await api('/api/prehand', {hand: HAND, chips, results: RESULTS.slice(0, HAND - 1)});
+  const r = await api('/api/prehand', {hand: HAND, chips, history: HIST.slice(0, HAND - 1)});
   CHIPS_BEFORE = chips;
   $('betCard').classList.remove('hidden');
   $('doneCard').classList.add('hidden');
@@ -287,7 +296,12 @@ async function getBet() {
     let h = `<div class="small">OPPONENT ESTIMATE</div>`;
     h += `<div class="kv"><span>Their chips now (likely)</span><b>~${Math.round(o.median).toLocaleString()}</b></div>`;
     h += `<div class="kv"><span>Middle half</span><b>${Math.round(o.q25).toLocaleString()} to ${Math.round(o.q75).toLocaleString()}</b></div>`;
-    if (HAND > 1) h += `<div class="kv"><span>Last hand they</span><b>gained ${pct(o.last_up, 0)} / even ${pct(o.last_same, 0)} / lost ${pct(o.last_down, 0)}</b></div>`;
+    if (HAND > 1) {
+      h += `<div class="kv"><span>Last hand they (hands like yours)</span><b>gained ${pct(o.last_up, 0)} / even ${pct(o.last_same, 0)} / lost ${pct(o.last_down, 0)}</b></div>`;
+      const last = o.history[o.history.length - 1];
+      h += `<div class="small" style="margin-top:4px">Your last hand counted as: <b>${last}</b>.` +
+        (o.last_insync ? ` If they were still on your cards, they gained ${pct(o.last_insync.up, 0)} of the time in that exact spot.` : '') + `</div>`;
+    }
     $('oppBox').innerHTML = h;
   } else $('oppBox').innerHTML = '';
   if (r.note) banner(r.note); else banner(null);
@@ -428,7 +442,18 @@ async function doubleCard(r) {
   }
   handOver('Doubled - hand finished');
 }
+function drawDealerPad() {
+  $('dealerPad').innerHTML = DEALER_OPTS.map((n, v) =>
+    `<button style="font-size:18px;padding:12px 0" class="${DCAT === v ? 'on' : ''}" onclick="DCAT=${v};drawDealerPad()">${n}</button>`).join('');
+  $('dealerPad').querySelectorAll('button.on').forEach(b => { b.style.background = 'var(--accent)'; b.style.color = 'var(--accent-ink)'; });
+}
 function handOver(msg) {
+  // dealer finish: known in some cases, otherwise one tap
+  DCAT = null;
+  if (msg === 'Dealer had blackjack') DCAT = 6;
+  const lastAct = ($('actionBox').querySelector('.action') || {}).textContent || '';
+  if (!S.split && (lastAct === 'BUST' || lastAct === 'BLACKJACK')) DCAT = 7;
+  drawDealerPad();
   $('playCard').classList.add('hidden');
   $('doneCard').classList.remove('hidden');
   $('doneMsg').textContent = (msg || 'Hand over') + (HAND >= 5 ? ' - that was hand 5.' : '');
@@ -438,14 +463,16 @@ function handOver(msg) {
 }
 function nextHand() {
   const v = $('chipsAfter').value;
+  if (DCAT === null) { $('doneMsg').textContent = 'Tap how the dealer finished first.'; return; }
   if (v === '') { $('chipsAfter').focus(); return; }
   if (HAND >= 5) {
-    $('logMe').value = v; HAND = 1; RESULTS = []; drawHandSeg(); $('chips').value = 1000;
+    $('logMe').value = v; HAND = 1; HIST = []; drawHandSeg(); $('chips').value = 1000;
     $('doneCard').classList.add('hidden'); $('betCard').classList.add('hidden');
     tab('log'); return;
   }
   const bet = +$('placedBet').value || 0;
-  RESULTS[HAND - 1] = bet ? Math.max(-4, Math.min(4, Math.round((+v - CHIPS_BEFORE) / bet * 2) / 2)) : 0;
+  const x = bet ? Math.max(-4, Math.min(4, Math.round((+v - CHIPS_BEFORE) / bet * 2) / 2)) : 0;
+  HIST[HAND - 1] = {x, dealer: DCAT, cards: S.cards.length >= 2 ? S.cards.slice(0, 2) : null, up: S.up};
   HAND += 1; drawHandSeg(); $('chips').value = v;
   getBet();
 }

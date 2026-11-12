@@ -38,7 +38,7 @@ def flat(b):
 def play(shoe, P, chips=1000.0, ptype=core.T_PARAM, h=0, rules=T):
     pst = np.zeros(6)
     core.init_pstate(P, pst)
-    rec = np.zeros(4)
+    rec = np.zeros(8)
     c, ptr = core.play_hand(shoe, 0, chips, h, ptype, P, pst, rules.R, rules.D, rules.act2, rules.actN,
                             rules.splt, rules.subd, *DUMMY, rec)
     return c, ptr, rec
@@ -220,7 +220,7 @@ def test_same_decisions_means_same_cards():
     """Flat 10 vs flat 20, both basic strategy, always affordable: every result must
     scale exactly 2x, proving both players saw identical cards."""
     P10, P20 = flat(10), flat(20)
-    rec = np.zeros(4); tr = np.zeros(5)
+    rec = np.zeros(8); tr = np.zeros(10)
     nb_seed(42)
     shoe = np.empty(312, dtype=np.int64)
     for _ in range(3000):
@@ -272,30 +272,37 @@ def test_result_classes():
     assert [core.xclass(x) for x in (-4, -2, -1, 0, 1, 1.5, 2, 3)] == [0, 0, 1, 2, 3, 4, 5, 5]
 
 
-def test_tree_plan_mirror_ties_and_history_tracking():
+def test_tree_plan_mirror_ties_history_and_ambiguity():
     from rivals import corr
     from rivals.config import Settings
-    tp = corr.build_tree_plan(Settings(), n_per_type=100_000, verbose=False, T=T)
+    tp = corr.build_tree_plan(Settings(), n_per_type=300_000, verbose=False, T=T)
     tabs = tp.engine_tables()
     P = corr.tree_player_params()
     wtl, _, _ = core.simulate(20000, 5, 8, core.T_OPT, P, core.T_OPT, P, T.R, T.D, T.act2,
                               T.actN, T.splt, T.subd, *tabs, 10, *tabs)
     assert wtl.sum(axis=0)[1] == 20000
-    # replay matches by hand: the engine's bet each hand must equal the table entry for
-    # the node built from this match's earlier results (what the advisor does)
-    rec = np.zeros(4); tr = np.zeros(5); pst = np.zeros(6)
+    # 20 vs 6 that won on a dealer bust: (nearly) every opponent won too -> "won (clear)".
+    # 16 vs 10 that won on a dealer bust: casuals often hit 16 -> "won (ambiguous)".
+    k20 = corr.make_key(corr.start_cat_ranks(10, 10), 6, 3, 5)
+    k16 = corr.make_key(corr.start_cat_ranks(10, 6), 10, 3, 5)
+    assert tp.keymap[k20] == 4 and tp.keystat[k20, 0] > 0.9
+    assert tp.keymap[k16] == 5 and tp.keystat[k16, 0] < 0.8
+    assert tp.keymap[corr.make_key(0, 6, 4, 7)] == 6          # blackjack bucket
+    # replay matches: the engine's bet each hand must equal the table entry for the node
+    # built from this match's earlier observations (what the advisor does)
+    rec = np.zeros(8); tr = np.zeros(10); pst = np.zeros(6)
     nb_seed(3)
     shoe = np.empty(312, dtype=np.int64)
     for _ in range(300):
         core.make_shoe(shoe)
         core.play_match_player(shoe, core.T_OPT, P, T.R, T.D, T.act2, T.actN, T.splt, T.subd,
                                *tabs, pst, rec, tr)
-        c, hist = 1000.0, []
+        c, buckets = 1000.0, []
         for h in range(5):
-            nd = corr.node_id(h, corr.history_code(hist))
+            nd = corr.node_id(h, corr.history_code(buckets))
             b = float(tp.bet[nd, int(round(c / 2.5))])
             if c >= 10:
                 x = (tr[h] - c) / b
                 assert abs(x * 2 - round(x * 2)) < 1e-9     # result is a whole number of half-bets
-                hist.append(x)
+            buckets.append(int(tp.keymap[int(tr[5 + h])]))
             c = tr[h]
