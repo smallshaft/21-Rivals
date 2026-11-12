@@ -312,8 +312,10 @@ def run_all(n_main=10_000_000, n_sweep=2_000_000, n_attr=2_000_000, quick=False)
     # ---------- bankroll ----------
     dm = main["optimizer"]["_default_mix"]
     rep["ruin_default_mix"] = risk_of_ruin(dm["win"], dm["tie"], dm["loss"])
-    stress = mixture(main["optimizer"], {"sharp_c": 0.5, "casual_a": 0.25, "casual_b": 0.25})
-    rep["stress_mix_50pct_sharp_c"] = stress
+    # stress: half the pool are near-mirror players (match-aware, like this app)
+    nm_rows = rep["sweeps"].get("nm", {}).get("rows", [])
+    stress = nm_rows[5]["reopt"] if len(nm_rows) > 5 else mixture(main["optimizer"], settings.mix)
+    rep["stress_mix"] = stress
     rep["ruin_stress_mix"] = risk_of_ruin(stress["win"], stress["tie"], stress["loss"])
     rep["elapsed_s"] = time.time() - t0
     with open(os.path.join(RESULTS_DIR, "report.json"), "w") as f:

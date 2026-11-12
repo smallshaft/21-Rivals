@@ -41,7 +41,6 @@ def recommendation(rep: dict) -> str:
              f"(largest passing: ${best}). Required bankroll for <1% ruin is about **{need:.0f} entries** "
              f"(diffusion approximation): ${need:.0f} for $1, ${5 * need:.0f} for $5, ${10 * need:.0f} for $10, "
              f"${20 * need:.0f} for $20." if ok else "- No entry size passes the 1% ruin test."]
-    st = rep.get("stress_mix_50pct_sharp_c")
     lines.append("- **But the model's edge is unproven in the real pool.** Start at **$1** until the dashboard "
                  "shows 200+ logged decided matches with the real 99% CI lower bound above 55.56%. "
                  "Then move to $5. Move to $10 only with 400+ matches still above break-even and a bankroll of at "
@@ -149,7 +148,7 @@ def write_markdown(rep: dict, path=None):
     w("")
 
     w("## Bankroll ($500), 2,000-match horizon\n")
-    for key, title in (("ruin_default_mix", "Default mix"), ("ruin_stress_mix", "Stress mix (50% Sharp C)")):
+    for key, title in (("ruin_default_mix", "Default mix"), ("ruin_stress_mix", "Stress mix (50% near-mirror players, 50% casuals)")):
         w(f"### {title}\n")
         w("| Entry | EV/match | P(ruin) in 200 | P(ruin) in 2000 | Median bankroll | 5th pct |")
         w("|---|---|---|---|---|---|")

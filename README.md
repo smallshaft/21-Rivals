@@ -135,7 +135,10 @@ That plays the strategy against opponents it wasn't tuned for. Add `--quick` to 
 - **The optimizer assumes your opponent's cards are independent of yours.** They aren't: same shoe. Validation models this exactly, so the reported win rates are honest. But the in-app "Est. win %" is the optimizer's internal number, not the validated one.
 - **Unconfirmed rules** (flags in Settings, tested in the report): dealer peek, whether the dealer draws when you've busted (changes card order after divergence), splitting K-Q, whether A-8/A-9 count as "9/10" for doubling. Also assumed: side-stake wins are paid at the end of the hand (not usable for a double), and you can't double/split/insure without enough chips behind the bet.
 - **Not modeled:** the 6-minute clock (assumed nobody times out), card counting within the shoe, opponents who change behavior based on their own running score.
-- **Terms of Use risk:** see the summary in the conversation/README notes. DraftKings' general terms ban "automated means (including scripts and third-party tools)" to interact with the site. This app never touches DraftKings, but "third-party tools" is broad. Use at your own risk.
+- **Terms of Use risk.** I couldn't find a 21 Rivals-specific rule on outside help. DraftKings' launch page for the game ([dknetwork.draftkings.com](https://dknetwork.draftkings.com/2026/11/10/21-rivals-draftkings-head-to-head-card-game-launch/)) doesn't mention one, and the main terms pages blocked automated fetching. But:
+  - The DraftKings Terms of Use prohibit "using automated means (including but not limited to scripts and third-party tools) to interact with the Website" ([summary of the clause](https://conductatlas.com/platform/draftkings/draftkings-terms-of-use/provision/CA-P-039377/automated-means-to-interact-with-website-prohibited/)). This app never touches DraftKings: your dad reads and taps everything himself. "Third-party tools" is still broad enough that DraftKings could argue it applies.
+  - DraftKings' international terms explicitly ban "software-assisted methods" during play. The US terms bar collusion and account sharing, so he should play only on his own account.
+  - Read the in-app Skill Games rules / Terms before playing. If they ban outside assistance, account closure and forfeited winnings are the realistic risk.
 
 ## 7. Files
 
@@ -154,3 +157,26 @@ web/app.py            Flask server;  web/templates/index.html  the phone UI
 tests/                pytest suite
 data/                 your settings + matches.sqlite3 (not committed)
 ```
+
+---
+
+## 8. Results summary (from `results/REPORT.md`, 10M matches per matchup)
+
+Win % of **decided** matches (ties refund). Break-even after the 10% rake is **55.56%** at every entry size.
+
+| Opponent | This app | Basic strategy + 10 bets | Basic + flat 200 |
+|---|---|---|---|
+| Sharp A (basic strategy, flat 25–200) | **66.4%** | 51.4% | 48.6% |
+| Sharp B (exact mirror of this app) | 100% ties | - | - |
+| Casual A (gut feel) | **62.1%** | 54.3% | 51.5% |
+| Casual B (degen) | **68.0%** | 67.4% | 66.4% |
+| Near-mirror (this plan, bets ±30%) | **48.7%: loses** | - | - |
+| Default mix (25% sharp / 75% casual) | **65.2%**, 99% CI [65.21, 65.26] | 55.5% | 56.2% |
+
+- **Where the edge comes from:** bet sizing. The app bets big early (310 on hand 1), locks in any lead with minimum bets, and goes big with side stakes only when behind late. It exploits opponents whose final scores bunch near 1,000. Playing basic strategy with the app's bets gives essentially the same result: the in-hand deviations are worth about 0 points. Side stakes in catch-up spots add about +0.5 to +0.9 points vs Sharp A and Casual A.
+- **Break-even sharp %:**
+  - With "sharp" defined as requested (half flat-betting basic players, half exact mirrors): there is none. Flat bettors are easy and mirrors only tie.
+  - With "sharp" defined as match-aware players who also shape their bets (near-mirror): profitable only if **under ~43%** of opponents are like that.
+  - Both hold at every entry size.
+- **Fragility:** against opponent types it wasn't tuned for, results range from 54.5% (a degen who shoves exactly once) to 73% (min-betting sharps). Casuals betting 100–500 come out at 56.5%, barely above break-even.
+- **Rule flags barely matter:** no-peek, dealer draws after you bust, and splitting K-Q all land within ±0.1 points.

@@ -1,0 +1,75 @@
+[    0.0s] building tables, opponent distributions, default plan ...
+[   57.4s] house edge -0.005471474999999951
+[   91.2s] optimizer       vs sharp_a   W 0.6636 T 0.0001 L 0.3363 dec 0.6637 [0.6633,0.6640]
+[  140.3s] optimizer       vs sharp_b   W 0.0000 T 1.0000 L 0.0000 dec nan [nan,nan]
+[  174.7s] optimizer       vs casual_a  W 0.6196 T 0.0025 L 0.3778 dec 0.6212 [0.6208,0.6216]
+[  208.3s] optimizer       vs casual_b  W 0.6793 T 0.0006 L 0.3201 dec 0.6797 [0.6793,0.6801]
+[  259.0s] optimizer       vs sharp_c   W 0.7790 T 0.0174 L 0.2036 dec 0.7928 [0.7924,0.7931]
+[  289.4s] basic_min       vs sharp_a   W 0.4570 T 0.1106 L 0.4324 dec 0.5138 [0.5134,0.5143]
+[  340.7s] basic_min       vs sharp_b   W 0.2690 T 0.0000 L 0.7310 dec 0.2690 [0.2686,0.2694]
+[  358.2s] basic_min       vs casual_a  W 0.5393 T 0.0061 L 0.4546 dec 0.5426 [0.5422,0.5430]
+[  374.6s] basic_min       vs casual_b  W 0.6734 T 0.0006 L 0.3261 dec 0.6738 [0.6734,0.6741]
+[  408.0s] basic_min       vs sharp_c   W 0.1861 T 0.0002 L 0.8137 dec 0.1862 [0.1859,0.1865]
+[  423.9s] basic_flat200   vs sharp_a   W 0.3242 T 0.3330 L 0.3427 dec 0.4861 [0.4856,0.4866]
+[  457.5s] basic_flat200   vs sharp_b   W 0.4609 T 0.0002 L 0.5389 dec 0.4610 [0.4606,0.4614]
+[  474.8s] basic_flat200   vs casual_a  W 0.5123 T 0.0050 L 0.4827 dec 0.5149 [0.5145,0.5153]
+[  490.7s] basic_flat200   vs casual_b  W 0.6387 T 0.0378 L 0.3235 dec 0.6638 [0.6634,0.6642]
+[  525.4s] basic_flat200   vs sharp_c   W 0.4732 T 0.0265 L 0.5003 dec 0.4861 [0.4857,0.4865]
+[  528.5s] opt_basic_play  vs sharp_a   W 0.6611 T 0.0001 L 0.3388 dec 0.6611 [0.6603,0.6620]
+[  535.0s] opt_basic_play  vs sharp_b   W 0.1571 T 0.7241 L 0.1188 dec 0.5693 [0.5676,0.5710]
+[  538.6s] opt_basic_play  vs casual_a  W 0.6204 T 0.0024 L 0.3771 dec 0.6219 [0.6210,0.6228]
+[  541.8s] opt_basic_play  vs casual_b  W 0.6794 T 0.0007 L 0.3199 dec 0.6799 [0.6790,0.6807]
+[  548.5s] opt_basic_play  vs sharp_c   W 0.7732 T 0.0162 L 0.2106 dec 0.7859 [0.7852,0.7867]
+[  555.0s] opt_no_sides    vs sharp_a   W 0.6543 T 0.0002 L 0.3455 dec 0.6544 [0.6536,0.6553]
+[  565.1s] opt_no_sides    vs sharp_b   W 0.4298 T 0.5217 L 0.0485 dec 0.8985 [0.8977,0.8993]
+[  572.9s] opt_no_sides    vs casual_a  W 0.6116 T 0.0026 L 0.3858 dec 0.6132 [0.6123,0.6141]
+[  579.8s] opt_no_sides    vs casual_b  W 0.6782 T 0.0005 L 0.3213 dec 0.6786 [0.6777,0.6794]
+[  590.2s] opt_no_sides    vs sharp_c   W 0.8119 T 0.0028 L 0.1853 dec 0.8142 [0.8135,0.8149]
+[  600.9s] near mirror 0.48722701410103647
+[  622.6s] sweep ab x=0.0 dec 0.6520 lo 0.6514 ev +0.1733
+[  668.6s] sweep ab x=0.1 dec 0.6524 lo 0.6518 ev +0.1654
+[  719.7s] sweep ab x=0.2 dec 0.6522 lo 0.6516 ev +0.1563
+[  768.7s] sweep ab x=0.3 dec 0.6525 lo 0.6519 ev +0.1481
+[  817.6s] sweep ab x=0.4 dec 0.6535 lo 0.6530 ev +0.1409
+[  866.5s] sweep ab x=0.5 dec 0.6543 lo 0.6538 ev +0.1332
+[  914.3s] sweep ab x=0.6 dec 0.6552 lo 0.6547 ev +0.1254
+[  963.4s] sweep ab x=0.7 dec 0.6570 lo 0.6565 ev +0.1186
+[ 1012.1s] sweep ab x=0.8 dec 0.6558 lo 0.6552 ev +0.1082
+[ 1060.7s] sweep ab x=0.9 dec 0.6632 lo 0.6625 ev +0.1065
+[ 1096.0s] sweep ab x=1.0 dec 0.6689 lo 0.6680 ev +0.1020
+[ 1096.0s] sweep ab: breakeven sharp% point=None ci_low=None
+[ 1118.8s] sweep c x=0.0 dec 0.6517 lo 0.6511 ev +0.1729
+[ 1149.5s] sweep c x=0.1 dec 0.6638 lo 0.6632 ev +0.1943
+[ 1182.9s] sweep c x=0.2 dec 0.6783 lo 0.6778 ev +0.2200
+[ 1215.3s] sweep c x=0.3 dec 0.6929 lo 0.6924 ev +0.2457
+[ 1247.3s] sweep c x=0.4 dec 0.7067 lo 0.7062 ev +0.2700
+[ 1279.1s] sweep c x=0.5 dec 0.7289 lo 0.7284 ev +0.3111
+[ 1311.0s] sweep c x=0.6 dec 0.7471 lo 0.7466 ev +0.3438
+[ 1343.3s] sweep c x=0.7 dec 0.7760 lo 0.7755 ev +0.3956
+[ 1375.2s] sweep c x=0.8 dec 0.7952 lo 0.7946 ev +0.4298
+[ 1407.7s] sweep c x=0.9 dec 0.8136 lo 0.8130 ev +0.4628
+[ 1426.7s] sweep c x=1.0 dec 0.8324 lo 0.8317 ev +0.4963
+[ 1426.7s] sweep c: breakeven sharp% point=None ci_low=None
+[ 1447.9s] sweep nm x=0.0 dec 0.6520 lo 0.6514 ev +0.1734
+[ 1488.2s] sweep nm x=0.1 dec 0.6348 lo 0.6342 ev +0.1414
+[ 1528.8s] sweep nm x=0.2 dec 0.6071 lo 0.6066 ev +0.0912
+[ 1570.2s] sweep nm x=0.3 dec 0.5821 lo 0.5816 ev +0.0464
+[ 1610.7s] sweep nm x=0.4 dec 0.5631 lo 0.5626 ev +0.0131
+[ 1652.5s] sweep nm x=0.5 dec 0.5353 lo 0.5347 ev -0.0352
+[ 1694.9s] sweep nm x=0.6 dec 0.5246 lo 0.5240 ev -0.0531
+[ 1736.9s] sweep nm x=0.7 dec 0.4996 lo 0.4990 ev -0.0952
+[ 1779.1s] sweep nm x=0.8 dec 0.5031 lo 0.5023 ev -0.0890
+[ 1821.3s] sweep nm x=0.9 dec 0.5325 lo 0.5316 ev -0.0380
+[ 1849.1s] sweep nm x=1.0 dec 0.5126 lo 0.5116 ev -0.0711
+[ 1849.1s] sweep nm: breakeven sharp% point=0.4271308393156932 ci_low=0.42522635944215104
+[ 1878.6s] sensitivity default        sharp_a:0.664 casual_a:0.621 casual_b:0.680 sharp_c:0.793 _default_mix:0.652
+[ 1914.5s] sensitivity all_casual     sharp_a:0.657 casual_a:0.622 casual_b:0.682 sharp_c:0.773 _default_mix:0.652
+[ 1961.1s] sensitivity 50%_sharp      sharp_a:0.663 casual_a:0.620 casual_b:0.679 sharp_c:0.795 _default_mix:0.651
+[ 2009.1s] sensitivity 100%_sharp_ab  sharp_a:0.669 casual_a:0.614 casual_b:0.678 sharp_c:0.791 _default_mix:0.649
+[ 2046.8s] sensitivity only_sharp_a   sharp_a:0.697 casual_a:0.601 casual_b:0.670 sharp_c:0.518 _default_mix:0.644
+[ 2084.0s] sensitivity only_casual_a  sharp_a:0.678 casual_a:0.619 casual_b:0.616 sharp_c:0.748 _default_mix:0.627
+[ 2122.0s] sensitivity only_casual_b  sharp_a:0.421 casual_a:0.413 casual_b:0.718 sharp_c:0.510 _default_mix:0.545
+[ 2211.4s] assumption no_peek: dec 0.6532
+[ 2298.8s] assumption dealer_draws_if_all_bust: dec 0.6526
+[ 2392.3s] assumption split_by_value: dec 0.6522
+[ 2395.9s] done

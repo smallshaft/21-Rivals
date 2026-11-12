@@ -195,12 +195,15 @@ def build(path=None):
         return yd
 
     if rep:
-        o = rep["main"]["optimizer"]["_default_mix"]["dec_rate"]
-        bp = rep["main"]["opt_basic_play"]["_default_mix"]["dec_rate"]
+        from .validate import mixture
+        w = {**s.mix, "sharp_b": 0.0}      # mirror matches are ties either way; exclude
+        o = mixture(rep["main"]["optimizer"], w)["dec_rate"]
+        bp = mixture(rep["main"]["opt_basic_play"], w)["dec_rate"]
         diff = 100 * (o - bp)
-        yd = para(f"Measured value of ALL deviations combined (default mix, sim): {diff:+.2f} points of win rate "
-                  f"({100 * o:.2f}% with vs {100 * bp:.2f}% without). "
-                  + ("Small: if you're short on time, just play the chart." if abs(diff) < 0.5 else ""), yd, bold=True)
+        yd = para(f"Measured value of ALL in-hand deviations combined (sim, non-mirror opponents): {diff:+.2f} "
+                  f"points of win rate. "
+                  + ("That's basically nothing: the edge is the BET PLAN. If rushed, just play the chart."
+                     if abs(diff) < 0.5 else ""), yd, bold=True)
         yd -= 2
     # deviation scenarios go under the bet plan (left column, wide)
     yr = yd
