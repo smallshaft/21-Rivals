@@ -1,1 +1,10 @@
 [    0.0s] building tables, opponent distributions, plans ...
+[   76.7s] house edge -0.005471474999999951
+[   93.1s] optimizer      vs sharp_a     W 0.7315 T 0.0017 L 0.2668 dec 0.7328 [0.7324,0.7331]
+[  108.4s] optimizer      vs sharp_b     W 0.0000 T 1.0000 L 0.0000 dec nan [nan,nan]
+[  125.6s] optimizer      vs casual_a    W 0.6443 T 0.0033 L 0.3524 dec 0.6464 [0.6460,0.6468]
+[  141.2s] optimizer      vs casual_b    W 0.6836 T 0.0008 L 0.3156 dec 0.6841 [0.6838,0.6845]
+[  174.0s] optimizer      vs sharp_c     W 0.5961 T 0.0097 L 0.3942 dec 0.6019 [0.6015,0.6023]
+[  190.1s] optimizer      vs near_mirror W 0.4584 T 0.1001 L 0.4416 dec 0.5093 [0.5089,0.5098]
+[  221.9s] optimizer_v1   vs sharp_a     W 0.6635 T 0.0001 L 0.3363 dec 0.6636 [0.6632,0.6640]
+[  269.0s] optimizer_v1   vs sharp_b     W 0.0000 T 1.0000 L 0.0000 dec nan [nan,nan]
