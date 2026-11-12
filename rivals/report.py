@@ -24,6 +24,38 @@ def verdict(r):
     return "NOT profitable"
 
 
+def recommendation(rep: dict) -> str:
+    """Largest entry whose risk of ruin over 2,000 matches is < 1% under the default mix.
+    Move-up/down thresholds use the same 1% rule on the current bankroll."""
+    dm = rep["main"]["optimizer"]["_default_mix"]
+    if dm["dec_ci99"][0] <= BREAKEVEN:
+        return ("The default-mix result is not above break-even with 99% confidence, so the honest "
+                "recommendation is **don't play for money**, or play $1 only to collect real data.\n")
+    ok = [int(e) for e, r in rep["ruin_default_mix"].items() if r["p_ruin"] < 0.01]
+    best = max(ok) if ok else 1
+    ev = dm["ev_per_dollar"]
+    var = 0.64 * dm["win"] + dm["loss"] - ev ** 2
+    # bankroll needed for <1% ruin (diffusion approximation): B = -ln(0.01) * var / (2 ev) entries
+    need = (4.605 * var / (2 * ev)) if ev > 0 else float("inf")
+    lines = [f"- Under the default mix, every entry size has under 1% simulated risk of ruin on $500 "
+             f"(largest passing: ${best}). Required bankroll for <1% ruin is about **{need:.0f} entries** "
+             f"(diffusion approximation): ${need:.0f} for $1, ${5 * need:.0f} for $5, ${10 * need:.0f} for $10, "
+             f"${20 * need:.0f} for $20." if ok else "- No entry size passes the 1% ruin test."]
+    st = rep.get("stress_mix_50pct_sharp_c")
+    lines.append("- **But the model's edge is unproven in the real pool.** Start at **$1** until the dashboard "
+                 "shows 200+ logged decided matches with the real 99% CI lower bound above 55.56%. "
+                 "Then move to $5. Move to $10 only with 400+ matches still above break-even and a bankroll of at "
+                 "least 100 entries ($1,000). Use $20 only above $2,000.")
+    lines.append("- Move down one level if bankroll drops below 50 entries of the current level, or if the "
+                 "real win rate's 99% CI upper bound drops below 55.56% (you're losing), or if the real rate "
+                 "sits far below the sim prediction (the model is wrong about the pool).")
+    nm = rep.get("near_mirror")
+    if nm:
+        lines.append(f"- Worst realistic case: if most opponents are near-mirror players, the win rate is "
+                     f"{pct(nm['dec_rate'])} of decided matches. That loses money at every entry size.")
+    return "\n".join(lines) + "\n"
+
+
 def write_markdown(rep: dict, path=None):
     path = path or os.path.join(RESULTS_DIR, "REPORT.md")
     L = []
@@ -125,6 +157,8 @@ def write_markdown(rep: dict, path=None):
             w(f"| ${e} | {r['ev_per_match']:+.3f} | {pct(r['p_ruin_200'], 1)} | {pct(r['p_ruin'], 1)} | "
               f"${r['median_bankroll']:,.0f} | ${r['p5_bankroll']:,.0f} |")
         w("")
+    w("## Entry-size recommendation ($500 bankroll)\n")
+    w(recommendation(rep))
     with open(path, "w") as f:
         f.write("\n".join(L))
     return path
