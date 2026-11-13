@@ -41,7 +41,7 @@ import numpy as np
 from numba import njit, prange
 
 from . import core
-from .config import Settings, MODEL_KEYS, RESULTS_DIR
+from .config import Settings, MODEL_KEYS, RESULTS_DIR, CACHE_DIR
 from .strategy import build_tables, Tables
 from . import optimizer as O
 
@@ -56,7 +56,7 @@ NC = int(CMAX / core.CHIP) + 1
 NB = NC + 1
 MIN_COUNT = 400
 KEY_MIN = 300
-CACHE = os.path.join(RESULTS_DIR, "cache")
+CACHE = CACHE_DIR
 RESULT_NAMES = ["lost a double/split", "lost", "push", "won", "blackjack", "won a double/split"]
 DEALER_NAMES = ["17", "18", "19", "20", "21", "bust", "blackjack", "didn't play out"]
 

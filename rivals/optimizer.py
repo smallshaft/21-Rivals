@@ -41,7 +41,7 @@ from .strategy import build_tables, Tables
 NV = 40001          # value grid: 0 .. 100,000 chips
 NCOMP = 4001        # DP solved exactly up to 10,000 chips; above that: min bet
 NCHUNK = 64
-CACHE_DIR = os.path.join(RESULTS_DIR, "cache")
+from .config import CACHE_DIR  # noqa: E402
 
 
 @dataclass

@@ -13,9 +13,26 @@ from dataclasses import dataclass, field, asdict
 import numpy as np
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(ROOT, "data")
+def _writable(path: str, fallback_name: str) -> str:
+    """Use `path` if we can write there; otherwise a per-user folder macOS always allows
+    (Desktop/Downloads/iCloud folders can raise 'Operation not permitted')."""
+    try:
+        os.makedirs(path, exist_ok=True)
+        probe = os.path.join(path, ".write_test")
+        with open(probe, "w") as f:
+            f.write("ok")
+        os.remove(probe)
+        return path
+    except OSError:
+        alt = os.path.join(os.path.expanduser("~"), "Library", "Application Support", "21Rivals", fallback_name)
+        os.makedirs(alt, exist_ok=True)
+        return alt
+
+
+DATA_DIR = _writable(os.path.join(ROOT, "data"), "data")
 RESULTS_DIR = os.path.join(ROOT, "results")
 SETTINGS_PATH = os.path.join(DATA_DIR, "settings.json")
+CACHE_DIR = _writable(os.path.join(RESULTS_DIR, "cache"), "cache")
 
 START_CHIPS = 1000.0
 N_HANDS = 5

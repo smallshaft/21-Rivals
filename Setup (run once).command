@@ -17,6 +17,7 @@ if [ -z "$PY" ]; then
   exit 1
 fi
 echo "Using $($PY --version)"
+export NUMBA_CACHE_DIR="$HOME/Library/Caches/21Rivals/numba"; mkdir -p "$NUMBA_CACHE_DIR"
 $PY -m venv .venv && source .venv/bin/activate && pip install -q --upgrade pip && pip install -q -r requirements.txt
 if [ $? -eq 0 ]; then
   echo ""

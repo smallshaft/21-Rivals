@@ -23,6 +23,11 @@ app = Flask(__name__, template_folder="templates", static_folder="static")
 STATE = {"advisor": None, "status": "starting", "error": None}
 
 
+# compiled-code cache somewhere always writable (macOS blocks writes in Desktop/Downloads/iCloud folders)
+os.environ.setdefault("NUMBA_CACHE_DIR", os.path.join(os.path.expanduser("~"), "Library", "Caches", "21Rivals", "numba"))
+os.makedirs(os.environ["NUMBA_CACHE_DIR"], exist_ok=True)
+
+
 def _load(settings=None):
     try:
         STATE["status"] = "computing strategy (first run or new settings: ~2-5 min)."
